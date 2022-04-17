@@ -1,0 +1,51 @@
+:root {
+  /*------------------------------------------------------------------*/
+  /*                          MDC Variables                           */
+  /*------------------------------------------------------------------*/
+  --mdc-theme-primary: var(--background-color);
+  --mdc-theme-on-primary: var(--foreground-color);
+  --mdc-theme-secondary: var(--accent-color);
+  --mdc-theme-on-secondary: var(--background-color);
+  --mdc-theme-text-primary-on-background: var(--foreground-color);
+  --mdc-ripple-color: var(--ripple-color);
+}
+
+mwc-textfield {
+  /*------------------------------------------------------------------*/
+  /*                          Ripple Colors                           */
+  /*------------------------------------------------------------------*/
+  --mdc-theme-primary: var(--accent-color);
+  --mdc-theme-secondary: var(--accent-color);
+
+  --mdc-text-field-outlined-idle-border-color: var(--foreground-color);
+  --mdc-text-field-outlined-hover-border-color: var(--foreground-color);
+  --mdc-text-field-ink-color: var(--foreground-color);
+  --mdc-text-field-label-ink-color: var(--foreground-color);
+  --mdc-text-field-disabled-ink-color: var(--foreground-color);
+  --mdc-text-field-hover-line-color: var(--accent-color);
+  --mdc-text-field-idle-line-color: var(--foreground-color);
+  --mdc-text-field-fill-color: #{rgba(white, 5%)};
+}
+
+mwc-linear-progress {
+  --mdc-theme-primary: var(--accent-color);
+}
+
+mwc-icon-button {
+  color: var(--foreground-color);
+}
+
+* {
+  caret-color: var(--accent-color);
+}
+html,
+body {
+  background-color: var(--background-color);
+  color: var(--foreground-color);
+  font-family: sans-serif;
+  height: max(100%, 100vh);
+  overscroll-behavior-y: contain;
+}
+#app {
+  height: 100%;
+}

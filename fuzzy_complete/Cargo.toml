@@ -1,0 +1,19 @@
+[package]
+name = "fuzzy_complete"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fuzzy-matcher = "*"
+serde-wasm-bindgen = "*"
+wasm-bindgen = "*"
+serde = {version="1.0.130", features = ["derive"]}
+
+[profile.release]
+lto = true
+opt-level = 's'

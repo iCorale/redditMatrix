@@ -1,0 +1,18 @@
+{
+  "appId": "com.reddit.matrix",
+  "appName": "Reddit Matrix",
+  "bundledWebRuntime": false,
+  "npmClient": "pnpm",
+  "webDir": "public",
+  "backgroundColor": "#000000",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0,
+      "launchAutoHide": false,
+      "androidScaleType": "CENTER",
+      "showSpinner": true,
+      "splashFullscreen": false,
+      "splashImmersive": false
+    }
+  }
+}
