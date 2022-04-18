@@ -1,0 +1,1 @@
+import{e as r}from"./index.bb1110f9.js";function i(t,e){const n=getComputedStyle(t).transform.replace("none","");return{delay:e.delay||0,duration:e.duration||1e3,easing:e.easing||r,css:(s,o)=>`transform: rotate(${90*o}deg) ${n} scale(${s})`}}export{i as s};
