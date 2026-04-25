@@ -35,11 +35,11 @@
 </script>
 
 <masonry-layout bind:this={masonry} maxcolwidth="720" gap="0">
-  {#each posts as { url, title, id, embedUrl }, i (`${id}, ${title}`)}
+  {#each posts as { url, fullUrl, title, id, embedUrl }, i (`${id}, ${title}`)}
     <Card
       on:load={handleCardLoad}
       on:view={() => openLightbox(i)}
-      {url}
+      url={fullUrl ?? url}
       {title}
       isEmbed={!!embedUrl}
     />

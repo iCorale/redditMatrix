@@ -16,7 +16,6 @@
   $: url = current?.fullUrl ?? current?.url ?? ''
   $: title = current?.title ?? ''
   $: embedUrl = current?.embedUrl ?? null
-  // "Open in new tab" target: for embeds, convert iframe URL to watch URL
   $: externalUrl = embedUrl
     ? embedUrl.replace('/ifr/', '/watch/').replace('?autoplay=1', '')
     : url
@@ -29,15 +28,12 @@
   function close() {
     dispatch('close')
   }
-
   function prev() {
     if (currentIndex > 0) currentIndex--
   }
-
   function next() {
     if (currentIndex < posts.length - 1) currentIndex++
   }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') close()
     if (e.key === 'ArrowLeft') prev()
@@ -49,68 +45,64 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <div class="overlay" on:click|self={close}>
-  <div class="lightbox">
-    <div class="header">
-      <span class="title" title={title}>{title}</span>
-      <div class="actions">
-        <a
-          href={externalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="icon-btn"
-          title="在新标签页打开原图"
-        >
-          <OpenInNew />
-        </a>
-        <button class="icon-btn" on:click={close} title="关闭">
-          <Close />
-        </button>
-      </div>
-    </div>
+  <!-- Navigation arrows -->
+  {#if currentIndex > 0}
+    <button class="nav-btn left" on:click={prev} title="上一张">
+      <ChevronLeft />
+    </button>
+  {/if}
+  {#if currentIndex < posts.length - 1}
+    <button class="nav-btn right" on:click={next} title="下一张">
+      <ChevronRight />
+    </button>
+  {/if}
 
-    <div class="body">
-      {#if currentIndex > 0}
-        <button class="nav-btn left" on:click={prev} title="上一张">
-          <ChevronLeft />
-        </button>
-      {/if}
-
-      <div class="img-wrap">
-        {#if embedUrl}
-          <!-- Video/GIF embed (e.g. redgifs) -->
-          <iframe
-            src={embedUrl}
-            {title}
-            frameborder="0"
-            allowfullscreen
-            scrolling="no"
-            allow="autoplay; fullscreen"
-            class="embed-frame"
-          />
-        {:else}
-          {#if !imgLoaded}
-            <div class="spinner" />
-          {/if}
-          <img
-            src={url}
-            alt={title}
-            on:load={() => (imgLoaded = true)}
-            class:visible={imgLoaded}
-          />
-        {/if}
-      </div>
-
-      {#if currentIndex < posts.length - 1}
-        <button class="nav-btn right" on:click={next} title="下一张">
-          <ChevronRight />
-        </button>
-      {/if}
-    </div>
-
-    <div class="footer">
-      {currentIndex + 1} / {posts.length}
-    </div>
+  <!-- Top-right controls -->
+  <div class="top-actions">
+    <a
+      href={externalUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="icon-btn"
+      title="在新标签页打开"
+    >
+      <OpenInNew />
+    </a>
+    <button class="icon-btn" on:click={close} title="关闭">
+      <Close />
+    </button>
   </div>
+
+  <!-- Content -->
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <div class="img-wrap" on:click|self={close}>
+    {#if embedUrl}
+      <iframe
+        src={embedUrl}
+        {title}
+        frameborder="0"
+        allowfullscreen
+        scrolling="no"
+        allow="autoplay; fullscreen"
+        class="embed-frame"
+      />
+    {:else}
+      {#if !imgLoaded}
+        <div class="spinner" />
+      {/if}
+      <img
+        src={url}
+        alt={title}
+        on:load={() => (imgLoaded = true)}
+        class:visible={imgLoaded}
+      />
+    {/if}
+  </div>
+
+  <!-- Subtle page counter (only for multi-image galleries) -->
+  {#if posts.length > 1}
+    <div class="counter">{currentIndex + 1} / {posts.length}</div>
+  {/if}
 </div>
 
 <style lang="scss">
@@ -118,97 +110,36 @@
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: rgba(0, 0, 0, 0.88);
+    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: fadeIn 0.18s ease;
-    padding: 1rem;
+    animation: fadeIn 0.15s ease;
+    cursor: zoom-out;
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  .lightbox {
-    display: flex;
-    flex-direction: column;
-    width: min(92vw, 1100px);
-    max-height: 92vh;
-    background: var(--background-color);
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
-    animation: scaleIn 0.18s ease;
-  }
-
-  @keyframes scaleIn {
-    from {
-      transform: scale(0.96);
-      opacity: 0;
-    }
-    to {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.6rem 0.75rem 0.6rem 1rem;
-    border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-    flex-shrink: 0;
-
-    .title {
-      font-size: 0.875rem;
-      color: var(--foreground-color);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 1;
-      opacity: 0.85;
-    }
-
-    .actions {
-      display: flex;
-      gap: 0.2rem;
-      flex-shrink: 0;
-    }
-  }
-
-  .body {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 
   .img-wrap {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
-    min-height: 200px;
+    cursor: zoom-out;
 
     img {
-      max-width: 100%;
-      max-height: calc(92vh - 7rem);
+      max-width: 100vw;
+      max-height: 100vh;
       object-fit: contain;
       display: block;
       opacity: 0;
       transition: opacity 0.2s;
+      cursor: default;
+      animation: scaleIn 0.15s ease;
 
       &.visible {
         opacity: 1;
@@ -216,37 +147,71 @@
     }
 
     .embed-frame {
-      width: 100%;
-      height: calc(92vh - 7rem);
+      width: 100vw;
+      height: 100vh;
       border: none;
       background: #000;
+      cursor: default;
     }
+  }
+
+  @keyframes scaleIn {
+    from { transform: scale(0.97); }
+    to { transform: scale(1); }
   }
 
   .spinner {
     position: absolute;
     width: 2rem;
     height: 2rem;
-    border: 3px solid rgba(128, 128, 128, 0.3);
-    border-top-color: var(--accent-color);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #fff;
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
+    to { transform: rotate(360deg); }
+  }
+
+  /* Navigation arrows */
+  .nav-btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: 1.5rem;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s, background 0.15s;
+
+    &.left { left: 0.75rem; }
+    &.right { right: 0.75rem; }
+
+    &:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.22);
     }
   }
 
-  .footer {
-    text-align: center;
-    padding: 0.4rem;
-    font-size: 0.78rem;
-    color: var(--foreground-color);
-    opacity: 0.5;
-    flex-shrink: 0;
-    border-top: 1px solid rgba(128, 128, 128, 0.15);
+  /* Top-right close + external link */
+  .top-actions {
+    position: fixed;
+    top: 0.6rem;
+    right: 0.6rem;
+    z-index: 10;
+    display: flex;
+    gap: 0.2rem;
   }
 
   .icon-btn {
@@ -256,50 +221,36 @@
     width: 2rem;
     height: 2rem;
     border: none;
-    background: transparent;
-    color: var(--foreground-color);
-    cursor: pointer;
     border-radius: 50%;
-    font-size: 1.15rem;
-    opacity: 0.65;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+    opacity: 0.6;
     transition: opacity 0.15s, background 0.15s;
     text-decoration: none;
 
     &:hover {
       opacity: 1;
-      background: rgba(128, 128, 128, 0.18);
+      background: rgba(255, 255, 255, 0.2);
     }
   }
 
-  .nav-btn {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border: none;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    cursor: pointer;
-    border-radius: 50%;
-    font-size: 1.6rem;
-    opacity: 0.8;
-    transition: opacity 0.15s, background 0.15s;
-    z-index: 2;
-
-    &.left {
-      left: 0.75rem;
-    }
-    &.right {
-      right: 0.75rem;
-    }
-
-    &:hover {
-      opacity: 1;
-      background: rgba(0, 0, 0, 0.85);
-    }
+  /* Page counter */
+  .counter {
+    position: fixed;
+    bottom: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    pointer-events: none;
+    letter-spacing: 0.04em;
   }
 </style>
