@@ -7,7 +7,7 @@ export BRANCH='pages'
 export REPO_URL='https://github.com/iCorale/redditMatrix.git'
 export COMMIT_MESSAGE="deploy"
 
-set -e
+set -ea
 rm -rf $LOCAL_BUILD_DIR
 eval $BUILD_CMD
 cd $LOCAL_BUILD_DIR

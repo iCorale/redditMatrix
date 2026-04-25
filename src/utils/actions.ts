@@ -11,7 +11,7 @@ export function longpress(
   { callback, delay = 700 }: { callback: Function; delay?: number }
 ) {
   let isTouching = false
-  let timer: number
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   function handleTouchStart() {
     isTouching = true
@@ -20,11 +20,11 @@ export function longpress(
     }
   }
 
-  function handleTouchEnd(e) {
+  function handleTouchEnd(_e: Event) {
     isTouching = false
     if (timer) {
       clearTimeout(timer)
-      timer = null
+      timer = undefined
     }
   }
 

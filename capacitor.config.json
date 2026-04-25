@@ -3,7 +3,7 @@
   "appName": "Reddit Matrix",
   "bundledWebRuntime": false,
   "npmClient": "pnpm",
-  "webDir": "public",
+  "webDir": "dist",
   "backgroundColor": "#000000",
   "plugins": {
     "SplashScreen": {

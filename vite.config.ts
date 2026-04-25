@@ -1,34 +1,31 @@
 import { defineConfig } from 'vite'
-import { getAliases } from 'vite-aliases'
-import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 import wasmPack from 'vite-plugin-wasm-pack'
 import { VitePWA } from 'vite-plugin-pwa'
-import preprocess from 'svelte-preprocess'
 import Icons from 'unplugin-icons/vite'
 import comlink from 'vite-plugin-comlink'
-import worker, { pluginHelper } from 'vite-plugin-worker'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const BASE_URL = process.env.NODE_ENV === 'production' ? '/redditMatrix/' : '/'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   base: BASE_URL,
+  worker: {
+    plugins: () => [comlink()]
+  },
   plugins: [
-    comlink({
-      /**
-       * Filename of type file
-       * Set to a filename (releative to root) if you want to have
-       * auto generated type files for your imports.
-       * HIGHLY RECOMENDED WHEN USEING TYPESCRIPT!
-       * @default false
-       */
-      typeFile: 'comlink-workers.d.ts'
-    }),
-    pluginHelper(),
-    worker({}),
+    comlink(),
     svelte({
-      preprocess: preprocess({
-        scss: { prependData: '@import "src/variables";' }
-      })
+      preprocess: vitePreprocess(),
+      onwarn: (warning, handler) => {
+        // MWC custom elements handle accessibility internally; suppress false positives
+        if (warning.code.startsWith('a11y-')) return
+        handler(warning)
+      }
     }),
     Icons({ compiler: 'svelte' }),
     VitePWA({
@@ -58,18 +55,48 @@ export default defineConfig({
         ]
       }
     }),
-    wasmPack(['./fuzzy_complete'], [])
+    wasmPack(['./fuzzy_complete'])
   ],
+  server: {
+    proxy: {
+      '/reddit-api': {
+        target: 'https://www.reddit.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/reddit-api/, '')
+      }
+    }
+  },
+  preview: {
+    proxy: {
+      '/reddit-api': {
+        target: 'https://www.reddit.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/reddit-api/, '')
+      }
+    }
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler'
+      }
+    }
+  },
   publicDir: './assets/',
   build: {
     outDir: './dist/'
   },
   resolve: {
-    alias: getAliases()
+    alias: {
+      '@assets': resolve(__dirname, 'src/assets'),
+      '@components': resolve(__dirname, 'src/components'),
+      '@pages': resolve(__dirname, 'src/pages'),
+      '@store': resolve(__dirname, 'src/store'),
+      '@utils': resolve(__dirname, 'src/utils')
+    }
   },
   assetsInclude: ['**/*.svg'],
   optimizeDeps: {
-    exclude: ['@roxi/routify', '@urql/svelte'],
-    include: ['@roxi/routify/decorators']
+    exclude: ['@roxi/routify', 'fsevents']
   }
 })

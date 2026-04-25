@@ -1,7 +1,7 @@
-<script context="module">
-  // Worker for fuzzy matching
-  import createWorker from 'comlink:@utils/search'
-  const worker = createWorker()
+<script context="module" lang="ts">
+  const worker = new ComlinkWorker<typeof import('../utils/search')>(
+    new URL('../utils/search.ts', import.meta.url)
+  )
 </script>
 
 <script lang="ts">

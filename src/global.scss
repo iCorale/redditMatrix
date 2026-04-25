@@ -1,3 +1,22 @@
+/* ─── CSS custom properties (light / dark theme) ─────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent-color: #f8bbd0;
+    --background-color: #000000;
+    --foreground-color: #ffffff;
+    --ripple-color: #999999;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --accent-color: #c2185b;
+    --background-color: #ffffff;
+    --foreground-color: #000000;
+    --ripple-color: #cccccc;
+  }
+}
+
 :root {
   /*------------------------------------------------------------------*/
   /*                          MDC Variables                           */

@@ -1,28 +1,37 @@
 <script lang="ts">
   // components
   import Grid from '@components/Grid.svelte'
-  import InfiniteLoading, { InfiniteEvent } from 'svelte-infinite-loading'
+  import InfiniteLoading from 'svelte-infinite-loading'
+  import type { InfiniteEvent } from 'svelte-infinite-loading'
   import '@material/mwc-circular-progress'
 
   // props/stores
   import { params } from '@roxi/routify'
-  import { mode, posts } from '@store/app'
+  import { mode, posts, sort } from '@store/app'
 
   // methods
   import { getPosts } from '@utils/api'
   import { onDestroy, onMount, tick } from 'svelte'
   const handleInfinite = async (e: InfiniteEvent) => {
     try {
-      // check if first time
-      const after: string = $posts.length ? $posts[$posts.length - 1].id : ''
-      // get posts
-      const data = await getPosts($params.subreddit, $params.q ?? '', after)
-      if (!data.length) {
+      // Use postName (original Reddit "t3_xxx" name) as the pagination cursor.
+      // Gallery posts have composite ids like "t3_xxx_mediaId" which Reddit
+      // does not recognise as a valid `after` value, causing the same page to
+      // be returned again and producing duplicate-key errors.
+      const after: string = $posts.length ? $posts[$posts.length - 1].postName : ''
+      const data = await getPosts($params.subreddit, $params.q ?? '', after, $sort)
+      if (!Array.isArray(data) || !data.length) {
         e.detail.complete()
         return
       }
-      // append posts
-      $posts = [...$posts, ...data]
+      // Deduplicate by id as a safety net against API pagination overlap
+      const existingIds = new Set($posts.map((p) => p.id))
+      const fresh = data.filter((p) => !existingIds.has(p.id))
+      if (!fresh.length) {
+        e.detail.complete()
+        return
+      }
+      $posts = [...$posts, ...fresh]
       setTimeout(e.detail.loaded, 1500)
     } catch {
       setTimeout(e.detail.error, 1500)
@@ -58,7 +67,7 @@
     document.body.removeEventListener('keypress', handleKeyPress)
   })
 
-  $: identifier = `${$params.subreddit}${$params.q}`
+  $: identifier = `${$params.subreddit}${$params.q}${$sort}`
   $: {
     identifier
     $posts = []

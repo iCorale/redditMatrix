@@ -1,3 +1,6 @@
+// This file is kept for backward compatibility.
+// CSS custom properties are now declared in global.scss.
+// SCSS variables for component use:
 $accent-color-light: #c2185b;
 $background-color-light: #ffffff;
 $foreground-color-light: #000000;
@@ -7,27 +10,3 @@ $accent-color-dark: #f8bbd0;
 $background-color-dark: #000000;
 $foreground-color-dark: #ffffff;
 $ripple-color-dark: #999999;
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /*------------------------------------------------------------------*/
-    /*                           My Variables                           */
-    /*------------------------------------------------------------------*/
-    --accent-color: #{$accent-color-dark};
-    --background-color: #{$background-color-dark};
-    --foreground-color: #{$foreground-color-dark};
-    --ripple-color: #{$ripple-color-dark};
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    /*------------------------------------------------------------------*/
-    /* My Variables */
-    /*------------------------------------------------------------------*/
-    --accent-color: #{$accent-color-light};
-    --background-color: #{$background-color-light};
-    --foreground-color: #{$foreground-color-light};
-    --ripple-color: #{$ripple-color-light};
-  }
-}

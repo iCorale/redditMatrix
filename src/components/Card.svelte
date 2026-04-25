@@ -33,7 +33,8 @@
 </script>
 
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onMount, tick, createEventDispatcher } from 'svelte'
+  const dispatch = createEventDispatcher()
 
   import { longpress } from '@utils/actions'
   import { spinup } from '@utils/transition'
@@ -41,6 +42,7 @@
   // State
   export let checked = writable<boolean>(false)
   export let title: string, url: string
+  export let isEmbed: boolean = false
   let card: HTMLImageElement
 
   // Icons
@@ -89,11 +91,23 @@
       </div>
     </div>
   {/if}
+  {#if isEmbed}
+    <div class="play-badge">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M8 5.14v14l11-7-11-7z" />
+      </svg>
+    </div>
+  {/if}
   <div class="img" class:dim={$checked}
 
       use:longpress={{ callback: handleSelection }}
-      on:click={() =>
-        $selectedCards >= 1 && $mode === 'selection' && handleSelection(true)}
+      on:click={() => {
+        if ($mode === 'selection') {
+          if ($selectedCards >= 1) handleSelection(true)
+        } else {
+          dispatch('view')
+        }
+      }}
     >
     <div class="backdrop" />
     <img
@@ -121,6 +135,27 @@
     padding-block-start: 1rem;
     padding-inline-end: 1rem;
     z-index: 3;
+  }
+  div.play-badge {
+    justify-self: start;
+    align-self: end;
+    z-index: 3;
+    margin: 0.5rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.52);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    svg {
+      width: 0.85rem;
+      height: 0.85rem;
+      color: #fff;
+      margin-left: 0.1rem;
+    }
   }
   div.img {
     display: grid;
