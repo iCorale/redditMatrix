@@ -113,6 +113,7 @@
     <img
       bind:this={card}
       loading="lazy"
+      referrerpolicy="no-referrer"
       on:error|once={() => {
         card.style.display = 'none'
       }}

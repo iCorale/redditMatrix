@@ -7,7 +7,8 @@
 
   // props/stores
   import { params } from '@roxi/routify'
-  import { mode, posts, sort } from '@store/app'
+  import { mode, posts, sort, refreshSignal } from '@store/app'
+  import type { SortType } from '@utils/api'
 
   // methods
   import { getPosts } from '@utils/api'
@@ -59,15 +60,28 @@
         break
     }
   }
-  //lifecycle hooks
+  // Persist & restore sort per subreddit via localStorage
+  const SORT_KEY = (sub: string) => `redditMatrix:sort:${sub}`
+
   onMount(async () => {
     document.body.addEventListener('keypress', handleKeyPress)
+    // Restore the last-used sort for this subreddit (falls back to 'hot')
+    const saved = localStorage.getItem(SORT_KEY($params.subreddit)) as SortType | null
+    if (saved) $sort = saved
   })
+
   onDestroy(() => {
     document.body.removeEventListener('keypress', handleKeyPress)
   })
 
-  $: identifier = `${$params.subreddit}${$params.q}${$sort}`
+  // Save sort whenever it changes (after subreddit param is available)
+  $: if ($params.subreddit) {
+    localStorage.setItem(SORT_KEY($params.subreddit), $sort)
+  }
+
+  // identifier drives InfiniteLoading reset: change in sort, subreddit, query,
+  // or refreshSignal all clear posts and restart from the first page.
+  $: identifier = `${$params.subreddit}|${$params.q ?? ''}|${$sort}|${$refreshSignal}`
   $: {
     identifier
     $posts = []

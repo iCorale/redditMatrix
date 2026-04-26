@@ -8,3 +8,5 @@ type ModeLiterals = 'search' | 'idle' | 'selection'
 export const mode = writable<ModeLiterals>('idle')
 export const query = writable<string>('')
 export const sort = writable<SortType>('hot')
+/** Incrementing counter — changing this value forces a content refresh in [subreddit].svelte */
+export const refreshSignal = writable<number>(0)

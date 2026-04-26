@@ -16,7 +16,7 @@
   import '@material/mwc-icon-button'
 
   // props/stores
-  import { mode, sort } from '@store/app'
+  import { mode, sort, refreshSignal } from '@store/app'
   import { goto, params } from '@roxi/routify'
 
   export let dense: boolean
@@ -62,7 +62,14 @@
     <button
       class="sort-tab"
       class:active={$sort === option.value}
-      on:click={() => ($sort = option.value)}
+      on:click={() => {
+        if ($sort === option.value) {
+          // Already on this sort — re-click means "refresh"
+          $refreshSignal++
+        } else {
+          $sort = option.value
+        }
+      }}
     >
       <svelte:component this={option.icon} />
       {option.label}

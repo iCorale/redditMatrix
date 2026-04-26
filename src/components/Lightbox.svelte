@@ -16,8 +16,9 @@
   $: url = current?.fullUrl ?? current?.url ?? ''
   $: title = current?.title ?? ''
   $: embedUrl = current?.embedUrl ?? null
+  // "Open in new tab": for redgifs derive watch URL from embedUrl
   $: externalUrl = embedUrl
-    ? embedUrl.replace('/ifr/', '/watch/').replace('?autoplay=1', '')
+    ? embedUrl.replace('/ifr/', '/watch/')
     : url
 
   let imgLoaded = false
@@ -75,29 +76,30 @@
 
   <!-- Content -->
   <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <div class="img-wrap" on:click|self={close}>
-    {#if embedUrl}
-      <iframe
-        src={embedUrl}
-        {title}
-        frameborder="0"
-        allowfullscreen
-        scrolling="no"
-        allow="autoplay; fullscreen"
-        class="embed-frame"
-      />
-    {:else}
-      {#if !imgLoaded}
-        <div class="spinner" />
-      {/if}
-      <img
-        src={url}
-        alt={title}
-        on:load={() => (imgLoaded = true)}
-        class:visible={imgLoaded}
-      />
-    {/if}
-  </div>
+      <div class="img-wrap" on:click|self={close}>
+        {#if embedUrl}
+          <iframe
+            src={embedUrl}
+            {title}
+            frameborder="0"
+            allowfullscreen
+            scrolling="no"
+            allow="autoplay; fullscreen"
+            class="embed-frame"
+          />
+        {:else}
+          {#if !imgLoaded}
+            <div class="spinner" />
+          {/if}
+          <img
+            src={url}
+            alt={title}
+            referrerpolicy="no-referrer"
+            on:load={() => (imgLoaded = true)}
+            class:visible={imgLoaded}
+          />
+        {/if}
+      </div>
 
   <!-- Subtle page counter (only for multi-image galleries) -->
   {#if posts.length > 1}
@@ -153,6 +155,7 @@
       background: #000;
       cursor: default;
     }
+
   }
 
   @keyframes scaleIn {

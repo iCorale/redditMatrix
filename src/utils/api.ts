@@ -16,8 +16,7 @@ export type Post = {
   url: string
   /** Full-quality original image URL used by the lightbox (image posts only) */
   fullUrl?: string
-  /** iframe embed URL for video/gif posts (e.g. redgifs). When set, the
-   *  lightbox shows an iframe instead of an <img>. */
+  /** iframe embed URL for video/gif posts (redgifs). Lightbox shows an iframe. */
   embedUrl?: string
 }
 
@@ -128,21 +127,43 @@ function extractPosts(raw: any, subreddit: string): Post[] {
   }
 
   // ── Redgifs post ───────────────────────────────────────────────────────────
-  if (item.url.startsWith('https://www.redgifs.com/watch/')) {
-    // Thumbnail: prefer the Reddit-hosted external preview, fall back to oembed thumbnail
-    const previewUrl: string | undefined =
-      item.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, '&') ??
-      item.media?.oembed?.thumbnail_url
-    if (!previewUrl) return []
+  // Matches all known URL shapes:
+  //   https://www.redgifs.com/watch/<slug>
+  //   https://redgifs.com/watch/<slug>
+  //   http://v3.redgifs.com/watch/<slug>
+  const redgifsMatch = item.url.match(
+    /https?:\/\/(?:\w+\.)?redgifs\.com\/watch\/([a-z0-9]+)/i
+  )
+  if (redgifsMatch) {
+    const slug = redgifsMatch[1]
 
-    const slug = item.url.replace('https://www.redgifs.com/watch/', '')
+    // Reddit puts oembed data in either `media` or `secure_media` (HTTPS links).
+    // thumbnail_url is e.g. https://media.redgifs.com/PascalCaseName-poster.jpg
+    // media.redgifs.com uses hotlink protection (Referer check). All <img> elements
+    // that may point there carry referrerpolicy="no-referrer" (see Card.svelte).
+    const oembedThumb: string =
+      item.media?.oembed?.thumbnail_url ??
+      item.secure_media?.oembed?.thumbnail_url ??
+      ''
+
+    // Thumbnail priority:
+    //  1. Reddit CDN preview (external-preview.redd.it) — no hotlink restriction
+    //  2. redgifs oembed poster (media.redgifs.com) — needs no-referrer on <img>
+    //  3. item.thumbnail field
+    const thumbUrl: string =
+      item.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, '&') ??
+      (oembedThumb || undefined) ??
+      (typeof item.thumbnail === 'string' && item.thumbnail.startsWith('https://')
+        ? item.thumbnail
+        : '')
+
     return [
       {
         id: item.name,
         postName: item.name,
         title: item.title,
-        url: previewUrl,
-        embedUrl: `https://www.redgifs.com/ifr/${slug}?autoplay=1`
+        url: thumbUrl,
+        embedUrl: `https://www.redgifs.com/ifr/${slug}`
       }
     ]
   }
@@ -180,5 +201,8 @@ export const getPosts = async (
   const posts = await redditGet(url, params)
   if (!Array.isArray(posts)) return false
 
-  return posts.flatMap((post) => extractPosts(post, subreddit))
+  const extracted = posts.flatMap((post) => extractPosts(post, subreddit))
+
+  // Drop posts where we still have no thumbnail (card would be invisible anyway)
+  return extracted.filter((p) => p.url)
 }
