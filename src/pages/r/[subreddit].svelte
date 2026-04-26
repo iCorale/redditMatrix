@@ -13,30 +13,48 @@
   // methods
   import { getPosts } from '@utils/api'
   import { onDestroy, onMount, tick } from 'svelte'
-  const handleInfinite = async (e: InfiniteEvent) => {
+
+  let _fetchInFlight = false
+
+  /**
+   * Fetches the next page of posts and appends them to the store.
+   * Returns true if new posts were added, false if the feed is exhausted.
+   * Guards against concurrent calls with _fetchInFlight.
+   */
+  async function fetchNextPage(): Promise<boolean> {
+    if (_fetchInFlight) return false
+    _fetchInFlight = true
     try {
-      // Use postName (original Reddit "t3_xxx" name) as the pagination cursor.
-      // Gallery posts have composite ids like "t3_xxx_mediaId" which Reddit
-      // does not recognise as a valid `after` value, causing the same page to
-      // be returned again and producing duplicate-key errors.
-      const after: string = $posts.length ? $posts[$posts.length - 1].postName : ''
+      // Use postName as pagination cursor (gallery composite ids are invalid "after" values)
+      const after = $posts.length ? $posts[$posts.length - 1].postName : ''
       const data = await getPosts($params.subreddit, $params.q ?? '', after, $sort)
-      if (!Array.isArray(data) || !data.length) {
-        e.detail.complete()
-        return
-      }
-      // Deduplicate by id as a safety net against API pagination overlap
+      if (!Array.isArray(data) || !data.length) return false
       const existingIds = new Set($posts.map((p) => p.id))
       const fresh = data.filter((p) => !existingIds.has(p.id))
-      if (!fresh.length) {
-        e.detail.complete()
-        return
-      }
+      if (!fresh.length) return false
       $posts = [...$posts, ...fresh]
-      setTimeout(e.detail.loaded, 1500)
+      return true
+    } finally {
+      _fetchInFlight = false
+    }
+  }
+
+  const handleInfinite = async (e: InfiniteEvent) => {
+    try {
+      const hasMore = await fetchNextPage()
+      if (hasMore) {
+        setTimeout(e.detail.loaded, 1500)
+      } else {
+        e.detail.complete()
+      }
     } catch {
       setTimeout(e.detail.error, 1500)
     }
+  }
+
+  /** Called by Grid when the Lightbox approaches the last loaded post. */
+  function handleNeedMore() {
+    fetchNextPage() // fire-and-forget; store update triggers Grid reactivity
   }
 
   async function handleKeyPress(e: KeyboardEvent) {
@@ -88,7 +106,7 @@
   }
 </script>
 
-<Grid posts={$posts} />
+<Grid posts={$posts} on:needMore={handleNeedMore} />
 <div style="padding: 1rem 0">
   <InfiniteLoading {identifier} on:infinite={handleInfinite}>
     <svelte:fragment slot="spinner">

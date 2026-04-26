@@ -13,6 +13,8 @@
 
   export let posts: Post[] = []
   export let currentIndex: number = 0
+  /** True while the parent is fetching the next batch in the background */
+  export let loadingMore: boolean = false
 
   $: current   = posts[currentIndex]
   $: url       = current?.fullUrl ?? current?.url ?? ''
@@ -105,6 +107,10 @@
     {#if currentIndex < posts.length - 1}
       <button class="nav-btn right" on:click={next} title="下一张">
         <ChevronRight />
+      </button>
+    {:else if loadingMore}
+      <button class="nav-btn right" disabled title="加载更多...">
+        <span class="btn-spinner" />
       </button>
     {/if}
   {/if}
@@ -308,6 +314,18 @@
     &.left  { left:  0.75rem; }
     &.right { right: 0.75rem; }
     &:hover { opacity: 1; background: rgba(255,255,255,0.22); }
+    &:disabled { cursor: default; }
+    &:disabled:hover { opacity: 0.7; background: rgba(255,255,255,0.12); }
+  }
+
+  .btn-spinner {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
   }
 
   /* ── Top-right buttons ── */

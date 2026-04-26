@@ -14,10 +14,42 @@
   import type { MasonryLayout } from '@appnest/masonry-layout'
   let masonry: MasonryLayout
 
+  // event dispatcher (used to request more posts from the parent)
+  import { createEventDispatcher } from 'svelte'
+  const dispatch = createEventDispatcher()
+
   // lightbox state
   let lightboxIndex: number | null = null
 
-  // methods
+  // ── Lightbox preload ──────────────────────────────────────────────────────
+  // When the Lightbox is within PRELOAD_THRESHOLD images of the end, ask the
+  // parent to fetch the next page in the background.
+  const PRELOAD_THRESHOLD = 3
+  let _needMoreSent = false   // guard: only dispatch once per batch
+  let _lastPostsLen = 0       // detect when new posts arrive
+
+  $: {
+    // New posts arrived → allow another preload trigger
+    if (posts.length > _lastPostsLen) {
+      _lastPostsLen = posts.length
+      _needMoreSent = false
+    }
+    // Approaching the end of the list while Lightbox is open
+    if (
+      lightboxIndex !== null &&
+      posts.length > 0 &&
+      lightboxIndex >= posts.length - PRELOAD_THRESHOLD &&
+      !_needMoreSent
+    ) {
+      _needMoreSent = true
+      dispatch('needMore')
+    }
+  }
+
+  // True while the user is on the very last loaded post (spinner cue for Lightbox)
+  $: loadingMore = lightboxIndex !== null && lightboxIndex === posts.length - 1 && _needMoreSent
+
+  // ── Card / Lightbox helpers ───────────────────────────────────────────────
   function handleCardLoad(e: Event) {
     e.stopPropagation()
     ;(e.target as HTMLElement).dataset.aos = 'fade-up'
@@ -32,7 +64,7 @@
   function closeLightbox() {
     const idx = lightboxIndex
     lightboxIndex = null
-    // After the lightbox unmounts, scroll the corresponding card into view
+    // After the lightbox unmounts, scroll the card that was last viewed into view
     requestAnimationFrame(() => {
       const el = document.getElementById(`card-${idx}`)
       if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -58,6 +90,7 @@
   <Lightbox
     {posts}
     bind:currentIndex={lightboxIndex}
+    {loadingMore}
     on:close={closeLightbox}
   />
 {/if}
