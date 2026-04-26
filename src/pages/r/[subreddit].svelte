@@ -78,23 +78,37 @@
         break
     }
   }
-  // Persist & restore sort per subreddit via localStorage
   const SORT_KEY = (sub: string) => `redditMatrix:sort:${sub}`
 
-  onMount(async () => {
+  onMount(() => {
     document.body.addEventListener('keypress', handleKeyPress)
-    // Restore the last-used sort for this subreddit (falls back to 'hot')
-    const saved = localStorage.getItem(SORT_KEY($params.subreddit)) as SortType | null
-    if (saved) $sort = saved
   })
 
   onDestroy(() => {
     document.body.removeEventListener('keypress', handleKeyPress)
   })
 
-  // Save sort whenever it changes (after subreddit param is available)
-  $: if ($params.subreddit) {
-    localStorage.setItem(SORT_KEY($params.subreddit), $sort)
+  // ── Sort persistence ──────────────────────────────────────────────────────
+  // Problem: routify reuses the same component instance when navigating between
+  // subreddits (only $params changes). A naive "$: save $sort" would write the
+  // *previous* subreddit's sort into the *new* subreddit's key before the
+  // restore runs, corrupting stored preferences.
+  //
+  // Fix: track which subreddit is "active". When it changes, restore first,
+  // then let subsequent $sort changes save to the correct key.
+  let _activeSub = ''
+
+  $: if ($params.subreddit && $params.subreddit !== _activeSub) {
+    // Subreddit changed (or initial load): restore saved sort, then update tracker
+    _activeSub = $params.subreddit
+    const saved = localStorage.getItem(SORT_KEY(_activeSub)) as SortType | null
+    $sort = saved ?? 'hot'
+  }
+
+  // Persist sort — always keyed to _activeSub so a mid-navigation $sort value
+  // can never be written to the wrong subreddit
+  $: if (_activeSub) {
+    localStorage.setItem(SORT_KEY(_activeSub), $sort)
   }
 
   // identifier drives InfiniteLoading reset: change in sort, subreddit, query,

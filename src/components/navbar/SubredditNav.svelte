@@ -29,6 +29,7 @@
     $mode = 'idle'
   })
 
+
   const sortOptions = [
     { value: 'best', label: '最优', icon: StarOutline },
     { value: 'hot', label: '热门', icon: Fire },
@@ -101,7 +102,7 @@
     cursor: pointer;
     white-space: nowrap;
     opacity: 0.55;
-    transition: opacity 0.2s, border-color 0.2s, color 0.2s;
+    transition: opacity 0.15s; // only hover opacity animates; active state is instant
 
     &.active {
       border-bottom-color: var(--accent-color);

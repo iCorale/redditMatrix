@@ -21,10 +21,15 @@
 | 功能 | 说明 |
 |------|------|
 | **图片瀑布流** | 使用 `@appnest/masonry-layout` 实现自适应多列瀑布流布局 |
-| **排序切换** | 支持 热门 / 最新 / 最佳 / 上升 四种排序，切换时自动重新加载 |
-| **图片大图预览** | 点击任意图片打开 Lightbox，显示原始分辨率图片 |
-| **多图 Gallery 支持** | Reddit 多图帖子会被展开为独立卡片，Lightbox 内可左右切换 |
-| **无限滚动加载** | 滚动到底部自动加载下一页（`svelte-infinite-loading`） |
+| **五种排序** | Best / Hot / New / Top / Rising，切换时自动重载；点击已选中的 Tab 触发刷新；排序偏好通过 `localStorage` 按版块持久化 |
+| **Lightbox 全屏预览** | 点击图片全屏显示原始分辨率；支持键盘左右切换；点击外部或按 Esc 关闭 |
+| **Lightbox 图片缩放** | 点击图片放大至自然分辨率并定位到点击区域（仿 Reddit 交互）；支持原生滚动平移；再次点击或按 Esc 缩小；全屏模糊背景 |
+| **Lightbox 内无限预加载** | 浏览至距末尾 3 张时自动后台加载下一批，无需退出 Lightbox；最后一张时右箭头变为 loading spinner |
+| **关闭 Lightbox 自动定位** | 关闭后页面平滑滚动至最后查看的图片并高亮轮廓；距离近时 ease-in-out 缓动，距离远时瞬间跳转 + 轮廓环闪烁 |
+| **Redgifs 内容支持** | 识别 `redgifs.com` 链接，瀑布流展示缩略图（标注播放图标），Lightbox 内通过 iframe 嵌入播放 |
+| **多图 Gallery 支持** | Reddit 多图帖子展开为独立卡片，Lightbox 内可左右切换 |
+| **无限滚动加载** | 滚动到底部自动加载下一页（`svelte-infinite-loading`）；去重保护防止分页重叠 |
+| **滚动快捷按钮** | 浮动按钮根据滚动方向显示"到顶部"或"到底部"箭头 |
 | **版块搜索** | 支持在指定 subreddit 内关键词搜索 |
 | **版块收藏列表** | 首页维护自定义版块列表，支持长按选择批量操作 |
 | **模糊搜索** | 版块名称模糊补全，由 Rust 编译的 WASM 模块提供，运行在 Web Worker 中 |
@@ -48,9 +53,10 @@ redditMatrix/
 │   │       └── [subreddit].svelte  # 子版块图片墙页面（核心页面）
 │   │
 │   ├── components/
-│   │   ├── Card.svelte          # 单张图片卡片（含长按选择）
-│   │   ├── Grid.svelte          # 瀑布流网格，集成 Lightbox
-│   │   ├── Lightbox.svelte      # 全屏大图预览浮层
+│   │   ├── Card.svelte          # 单张图片卡片（含长按选择、播放角标）
+│   │   ├── Grid.svelte          # 瀑布流网格，集成 Lightbox 与预加载逻辑
+│   │   ├── Lightbox.svelte      # 全屏大图预览（缩放/平移/Redgifs iframe）
+│   │   ├── ScrollButton.svelte  # 浮动滚动快捷按钮（顶部/底部）
 │   │   ├── List.svelte          # 版块列表项
 │   │   ├── CancellableList.svelte
 │   │   ├── Results.svelte       # 搜索结果展示
@@ -61,7 +67,7 @@ redditMatrix/
 │   │       └── SelectionNav.svelte  # 多选操作导航栏
 │   │
 │   ├── store/
-│   │   └── app.ts               # 全局 Svelte Store（posts, mode, sort, query…）
+│   │   └── app.ts               # 全局 Svelte Store（posts, mode, sort, query, refreshSignal）
 │   │
 │   ├── utils/
 │   │   ├── api.ts               # Reddit API 数据获取与转换（核心）
@@ -91,7 +97,7 @@ redditMatrix/
     │
     ▼
 [subreddit].svelte
-    │  调用 getPosts(subreddit, query, after, sort)
+    │  调用 fetchNextPage() → getPosts(subreddit, query, after, sort)
     ▼
 src/utils/api.ts  ── redditGet()
     │
@@ -101,14 +107,23 @@ src/utils/api.ts  ── redditGet()
     │
     ▼
 extractPosts()
-    ├── 普通帖子  → 返回 1 个 Post { id, title, url }
-    └── Gallery  → 展开为 N 个 Post { id, title, url（缩略图）, fullUrl（原图）}
+    ├── 普通帖子   → 返回 1 个 Post { id, title, url, fullUrl? }
+    ├── Gallery   → 展开为 N 个 Post（每张图独立卡片）
+    └── Redgifs   → 返回 Post { url（缩略图）, embedUrl（iframe src）}
     │
     ▼
-posts[] → Grid.svelte → Card.svelte × N
-                              │ on:view
-                              ▼
-                        Lightbox.svelte（展示 fullUrl 原图）
+posts[] store
+    │
+    ▼
+Grid.svelte → Card.svelte × N
+    │              │ on:view（打开 Lightbox）
+    │              │ on:needMore（Lightbox 接近末尾，触发后台预加载）
+    ▼              ▼
+svelte-infinite-loading    Lightbox.svelte
+（滚动触发加载）              ├── 图片：fullUrl → url fallback
+                             ├── Redgifs：<iframe embedUrl>
+                             └── 关闭 → Grid.closeLightbox()
+                                          → 平滑滚动 + 轮廓高亮定位
 ```
 
 ---
@@ -260,3 +275,30 @@ Capacitor 依赖锁定在 v3（`^3.2.5`）。升级至 v4/v5 需要同步修改 
 - 视频链接（`v.redd.it`、`youtu.be`、`.gifv`）
 - 特定图床（`gfycat.com`、`macdesktops.com`）
 - Gallery 索引页（`reddit.com/gallery/...` 未展开的链接）
+
+### 8. 排序持久化机制
+
+每个 subreddit 的排序偏好独立存储在 `localStorage`，key 格式为 `redditMatrix:sort:<subreddit>`。切换版块时自动恢复上次使用的排序方式。
+
+点击**已选中的排序 Tab** 会递增 `refreshSignal` store，触发 `[subreddit].svelte` 中的 `identifier` 变化，从而使 `svelte-infinite-loading` 重置并从第一页重新加载内容。
+
+### 9. Lightbox 预加载与无限浏览
+
+Lightbox 内浏览时，`Grid.svelte` 通过响应式语句监测 `lightboxIndex` 与 `posts.length` 的距离：
+
+- 当 `lightboxIndex >= posts.length - 3` 时，向父组件 dispatch `needMore` 事件
+- `[subreddit].svelte` 收到事件后调用 `fetchNextPage()` 静默后台加载
+- `fetchNextPage()` 内置 `_fetchInFlight` 并发锁，防止滚动触发与 Lightbox 触发同时发起重复请求
+- 新 posts 追加到 store 后，Lightbox 的"下一张"按钮自动恢复可用
+
+### 10. 关闭 Lightbox 后的定位逻辑
+
+关闭时执行以下步骤（`Grid.closeLightbox`）：
+
+1. `await tick()` — 等待 Svelte 将新加载的卡片写入 DOM
+2. `await setTimeout(80ms)` — 等待 Lightbox 完成卸载动画
+3. 最多重试 10 个动画帧，确认目标卡片 `getBoundingClientRect().height > 0`（masonry 已完成定位）
+4. 距离 < 2 倍视口高度 → `smoothScrollTo()`（ease-in-out-cubic，450ms）完成后触发轮廓闪烁
+5. 距离 ≥ 2 倍视口高度 → `scrollIntoView({ behavior: 'instant' })` 瞬间跳转后触发轮廓闪烁
+
+轮廓闪烁通过在 `document.body` 上创建 `position: fixed` 的覆盖层（`box-shadow` 动画）实现，不受任何祖先 `overflow: hidden` 裁剪影响。

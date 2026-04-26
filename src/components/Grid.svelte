@@ -15,7 +15,7 @@
   let masonry: MasonryLayout
 
   // event dispatcher (used to request more posts from the parent)
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, tick } from 'svelte'
   const dispatch = createEventDispatcher()
 
   // lightbox state
@@ -61,14 +61,85 @@
     lightboxIndex = index
   }
 
-  function closeLightbox() {
+  // ── Scroll helpers ───────────────────────────────────────────────────────
+
+  /** Ease-in-out cubic: slow start, fast middle, slow end. */
+  function easeInOutCubic(t: number) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+  }
+
+  /** Animate window scroll to targetY over `duration` ms with a custom easing.
+   *  Calls onComplete when the last frame fires. */
+  function smoothScrollTo(targetY: number, duration = 450, onComplete?: () => void) {
+    const startY = window.scrollY
+    const diff   = targetY - startY
+    const t0     = performance.now()
+    const step   = (now: number) => {
+      const progress = Math.min((now - t0) / duration, 1)
+      window.scrollTo(0, startY + diff * easeInOutCubic(progress))
+      if (progress < 1) {
+        requestAnimationFrame(step)
+      } else {
+        onComplete?.()
+      }
+    }
+    requestAnimationFrame(step)
+  }
+
+  /** Briefly draw a ring around a card so the user can locate it after scroll.
+   *  Creates a position:fixed overlay on document.body — cannot be clipped by
+   *  any ancestor overflow or hidden by any z-index inside the grid. */
+  function flashCard(el: HTMLElement) {
+    const rect = el.getBoundingClientRect()
+    const ring = document.createElement('div')
+    ring.style.cssText = [
+      'position:fixed',
+      `left:${rect.left}px`,
+      `top:${rect.top}px`,
+      `width:${rect.width}px`,
+      `height:${rect.height}px`,
+      'pointer-events:none',
+      'z-index:9999',
+      'animation:cardRingFlash 0.9s ease-out forwards',
+    ].join(';')
+    document.body.appendChild(ring)
+    ring.addEventListener('animationend', () => ring.remove(), { once: true })
+    setTimeout(() => ring.remove(), 1200) // safety fallback
+  }
+
+  async function closeLightbox() {
     const idx = lightboxIndex
     lightboxIndex = null
-    // After the lightbox unmounts, scroll the card that was last viewed into view
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`card-${idx}`)
-      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    })
+
+    // Wait for Svelte to flush DOM updates (e.g. newly-loaded cards from preload)
+    await tick()
+    // Let the Lightbox finish unmounting before the page moves
+    await new Promise<void>((r) => setTimeout(r, 80))
+
+    // Retry until masonry has laid out the target card
+    const tryScroll = (retries: number) => {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`card-${idx}`)
+        if (el && el.getBoundingClientRect().height > 0) {
+          const rect          = el.getBoundingClientRect()
+          const cardCenterY   = rect.top + rect.height / 2
+          const viewCenterY   = window.innerHeight / 2
+          const distance      = Math.abs(cardCenterY - viewCenterY)
+
+          if (distance > window.innerHeight * 2) {
+            // Far: instant jump; flash on the next two frames (scroll is sync)
+            el.scrollIntoView({ block: 'center', behavior: 'instant' })
+            requestAnimationFrame(() => requestAnimationFrame(() => flashCard(el)))
+          } else {
+            // Nearby: ease-in-out scroll, flash fires in the onComplete callback
+            smoothScrollTo(window.scrollY + cardCenterY - viewCenterY, 450, () => flashCard(el))
+          }
+        } else if (retries > 0) {
+          tryScroll(retries - 1)
+        }
+      })
+    }
+    tryScroll(10)
   }
 </script>
 
@@ -94,3 +165,14 @@
     on:close={closeLightbox}
   />
 {/if}
+
+<style>
+  /* Ring overlay injected via JS onto document.body — position:fixed, immune to
+     any overflow clipping. box-shadow spreads outside the div boundary. */
+  @keyframes -global-cardRingFlash {
+    0%   { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0);    }
+    15%  { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85); }
+    70%  { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45); }
+    100% { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0);    }
+  }
+</style>
