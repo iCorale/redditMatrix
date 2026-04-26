@@ -30,19 +30,27 @@
   }
 
   function closeLightbox() {
+    const idx = lightboxIndex
     lightboxIndex = null
+    // After the lightbox unmounts, scroll the corresponding card into view
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`card-${idx}`)
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
   }
 </script>
 
 <masonry-layout bind:this={masonry} maxcolwidth="720" gap="0">
   {#each posts as { url, fullUrl, title, id, embedUrl }, i (`${id}, ${title}`)}
-    <Card
-      on:load={handleCardLoad}
-      on:view={() => openLightbox(i)}
-      url={fullUrl ?? url}
-      {title}
-      isEmbed={!!embedUrl}
-    />
+    <div id="card-{i}">
+      <Card
+        on:load={handleCardLoad}
+        on:view={() => openLightbox(i)}
+        url={fullUrl ?? url}
+        {title}
+        isEmbed={!!embedUrl}
+      />
+    </div>
   {/each}
 </masonry-layout>
 
