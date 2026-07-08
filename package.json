@@ -24,15 +24,6 @@
     "validate": "svelte-check",
     "deploy": "./deploy.sh"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "svelte-preprocess",
-      "@parcel/watcher",
-      "bufferutil",
-      "utf-8-validate"
-    ]
-  },
   "devDependencies": {
     "@iconify-json/mdi": "^1.2.3",
     "@roxi/routify": "^2.18.3",

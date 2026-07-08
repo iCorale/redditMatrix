@@ -1,5 +1,4 @@
-import { Capacitor } from '@capacitor/core'
-import { Http } from '@capacitor-community/http'
+import { getCookie } from '@utils/cookieStore'
 
 export type SortType = 'best' | 'hot' | 'new' | 'top' | 'rising'
 
@@ -21,35 +20,38 @@ export type Post = {
 }
 
 /**
- * Platform-aware Reddit GET request:
- * - Native Capacitor: uses Http plugin (bypasses CORS at the OS level)
- * - Local browser (localhost/127.0.0.1): routes through Vite dev/preview proxy
- *   (/reddit-api → reddit.com) because Reddit blocks CORS for localhost origins.
- * - Production web (GitHub Pages etc.): calls Reddit API directly.
+ * Worker proxy URL.
+ *
+ * In development (wrangler dev):  http://localhost:8787
+ * In preview (vite preview):     served by the Vite proxy at /api → Worker
+ * In production:                  https://reddit-matrix-api.<name>.workers.dev
+ *
+ * Set VITE_API_URL in .env.local to override.
+ */
+const WORKER_URL = import.meta.env.VITE_API_URL || '/api'
+
+/**
+ * Single code path for all platforms — every client talks to the Cloudflare
+ * Worker, which handles OAuth and proxies to Reddit.
  */
 async function redditGet(
   url: string,
   params: Record<string, string>
 ): Promise<any[] | false> {
-  if (Capacitor.isNativePlatform()) {
-    const res = await Http.get({ url, params })
-    if (res.status !== 200) return false
-    return res.data.data.children
-  }
-
   const query = new URLSearchParams(params).toString()
   const apiUrl = query ? `${url}?${query}` : url
 
-  const isLocal =
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
+  // Strip the Reddit base URL, keep only the path (e.g. /r/cats/hot.json?...)
+  const path = apiUrl.replace(/^https?:\/\/[^/]+/, '')
 
-  const fetchUrl = isLocal
-    ? apiUrl.replace('https://www.reddit.com', '/reddit-api')
-    : apiUrl
+  const headers: Record<string, string> = {}
+  const cookie = getCookie()
+  if (cookie) headers['X-Reddit-Cookie'] = cookie
 
-  const res = await fetch(fetchUrl)
+  const res = await fetch(`${WORKER_URL}${path}`, { headers })
+
   if (!res.ok) return false
+
   const json = await res.json()
   return json.data.children
 }

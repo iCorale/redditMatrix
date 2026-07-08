@@ -1,0 +1,6 @@
+# Worker secrets — copy to .dev.vars for local wrangler dev.
+# Register your app at: https://www.reddit.com/prefs/apps
+# App type: "installed app"
+# redirect uri: http://localhost:8080 (can be anything for installed apps)
+REDDIT_CLIENT_ID=your_client_id_here
+REDDIT_CLIENT_SECRET=your_client_secret_here

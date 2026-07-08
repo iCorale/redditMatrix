@@ -8,4 +8,7 @@ ios/
 
 package-lock.json
 .env
+.env.local
+.dev.vars
+.wrangler/
 .DS_Store

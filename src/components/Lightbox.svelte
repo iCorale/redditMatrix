@@ -148,11 +148,12 @@
     {#if embedUrl}
       <iframe
         src={embedUrl}
-        {title}
+        title={title}
         frameborder="0"
         allowfullscreen
         scrolling="no"
         allow="autoplay; fullscreen"
+        sandbox="allow-scripts allow-same-origin"
         class="embed-frame"
       />
     {:else}

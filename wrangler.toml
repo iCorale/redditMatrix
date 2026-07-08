@@ -1,0 +1,19 @@
+# Reddit Matrix API Proxy Worker
+# Deploy: wrangler deploy
+# Local:  wrangler dev
+
+name = "reddit-matrix-api"
+main = "worker/index.ts"
+compatibility_date = "2025-07-01"
+
+# Free tier: 100k requests/day, plenty for a personal project
+# https://developers.cloudflare.com/workers/platform/pricing/
+
+[vars]
+# These will be overridden by `wrangler secret put` — do NOT commit real values.
+# REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set via:
+#   npx wrangler secret put REDDIT_CLIENT_ID
+#   npx wrangler secret put REDDIT_CLIENT_SECRET
+
+[observability]
+enabled = true
