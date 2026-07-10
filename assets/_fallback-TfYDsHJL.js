@@ -1,0 +1,1 @@
+import{S as i,i as l,s as o,n as s,d as r,a as c,e as d,b as f}from"./index-iUPapzZX.js";function m(a){let e;return{c(){e=d("div"),e.innerHTML='<h1 class="svelte-1ifnm87">404 Page Not Found</h1>',f(e,"class","svelte-1ifnm87")},m(t,n){c(t,e,n)},p:s,i:s,o:s,d(t){t&&r(e)}}}class p extends i{constructor(e){super(),l(this,e,null,m,o,{})}}export{p as default};

@@ -1,0 +1,1 @@
+import{e as s}from"./index-Ba13-C72.js";function i(t,e){const n=getComputedStyle(t).transform.replace("none","");return{delay:e.delay||0,duration:e.duration||1e3,easing:e.easing||s,css:(o,r)=>`transform: rotate(${90*r}deg) ${n} scale(${o})`}}export{i as s};
