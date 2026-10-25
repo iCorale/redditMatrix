@@ -27,24 +27,6 @@ export default defineConfig({
     Icons({ compiler: 'svelte' }),
     wasmPack(['./fuzzy_complete']),
   ],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
-      }
-    }
-  },
-  preview: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
-      }
-    }
-  },
   css: {
     preprocessorOptions: {
       scss: {

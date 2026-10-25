@@ -44,6 +44,7 @@
   export let title: string, url: string
   export let isEmbed: boolean = false
   let card: HTMLImageElement
+  let missing = !url
 
   // Icons
   import Check from '~icons/mdi/check-circle'
@@ -53,6 +54,7 @@
   Checks if the image size is known.
    */
   function checkSize() {
+    if (missing) return
     if (card?.naturalWidth) {
       card.style.aspectRatio = 'auto'
     } else {
@@ -98,28 +100,31 @@
       </svg>
     </div>
   {/if}
-  <div class="img" class:dim={$checked}
-
-      use:longpress={{ callback: handleSelection }}
-      on:click={() => {
-        if ($mode === 'selection') {
-          if ($selectedCards >= 1) handleSelection(true)
-        } else {
-          dispatch('view')
-        }
-      }}
-    >
+  <div
+    class="img"
+    class:dim={$checked}
+    class:placeholder={missing}
+    use:longpress={{ callback: handleSelection }}
+    on:click={() => {
+      if ($mode === 'selection') {
+        if ($selectedCards >= 1) handleSelection(true)
+      } else {
+        dispatch('view')
+      }
+    }}
+  >
     <div class="backdrop" />
     <img
       bind:this={card}
       loading="lazy"
       referrerpolicy="no-referrer"
       on:error|once={() => {
-        card.style.display = 'none'
+        missing = true
+        card.style.visibility = 'hidden'
       }}
       on:load
       alt={title}
-      src={url}
+      src={url || undefined}
     />
   </div>
 </section>
@@ -161,6 +166,10 @@
   div.img {
     display: grid;
     width: 100%;
+    &.placeholder {
+      aspect-ratio: 1;
+      background: #1a1a1a;
+    }
     &.dim {
       div.backdrop {
         clip-path: circle(200% at center bottom);

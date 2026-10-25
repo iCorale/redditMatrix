@@ -1,5 +1,3 @@
-import { getCookie } from '@utils/cookieStore'
-
 export type SortType = 'best' | 'hot' | 'new' | 'top' | 'rising'
 
 export type Post = {
@@ -20,19 +18,8 @@ export type Post = {
 }
 
 /**
- * Worker proxy URL.
- *
- * In development (wrangler dev):  http://localhost:8787
- * In preview (vite preview):     served by the Vite proxy at /api → Worker
- * In production:                  https://reddit-matrix-api.<name>.workers.dev
- *
- * Set VITE_API_URL in .env.local to override.
- */
-const WORKER_URL = import.meta.env.VITE_API_URL || '/api'
-
-/**
- * Single code path for all platforms — every client talks to the Cloudflare
- * Worker, which handles OAuth and proxies to Reddit.
+ * The Chrome extension intercepts listing fetches and reads Reddit in this
+ * browser. Without the extension the request cannot be read.
  */
 async function redditGet(
   url: string,
@@ -41,19 +28,15 @@ async function redditGet(
   const query = new URLSearchParams(params).toString()
   const apiUrl = query ? `${url}?${query}` : url
 
-  // Strip the Reddit base URL, keep only the path (e.g. /r/cats/hot.json?...)
-  const path = apiUrl.replace(/^https?:\/\/[^/]+/, '')
-
-  const headers: Record<string, string> = {}
-  const cookie = getCookie()
-  if (cookie) headers['X-Reddit-Cookie'] = cookie
-
-  const res = await fetch(`${WORKER_URL}${path}`, { headers })
-
-  if (!res.ok) return false
-
-  const json = await res.json()
-  return json.data.children
+  try {
+    const res = await fetch(apiUrl)
+    if (!res.ok) return false
+    const json = await res.json()
+    const children = json?.data?.children
+    return Array.isArray(children) ? children : false
+  } catch {
+    return false
+  }
 }
 
 /** Map Reddit MIME type to file extension */
@@ -114,7 +97,10 @@ function extractPosts(raw: any, subreddit: string): Post[] {
 
       // Lightbox original: i.redd.it direct URL, no CDN compression
       const ext = mimeToExt(meta.m)
-      const fullUrl = `https://i.redd.it/${media_id}.${ext}`
+      const direct = meta.s?.u?.replace(/&amp;/g, '&')
+      const fullUrl = direct?.includes('://i.redd.it/')
+        ? direct
+        : `https://i.redd.it/${media_id}.${ext}`
 
       images.push({
         id: `${item.name}_${media_id}`,
@@ -134,7 +120,7 @@ function extractPosts(raw: any, subreddit: string): Post[] {
   //   https://redgifs.com/watch/<slug>
   //   http://v3.redgifs.com/watch/<slug>
   const redgifsMatch = item.url.match(
-    /https?:\/\/(?:\w+\.)?redgifs\.com\/watch\/([a-z0-9]+)/i
+    /https?:\/\/(?:\w+\.)?redgifs\.com\/watch\/([a-z0-9-]+)/i
   )
   if (redgifsMatch) {
     const slug = redgifsMatch[1]
@@ -152,12 +138,12 @@ function extractPosts(raw: any, subreddit: string): Post[] {
     //  1. Reddit CDN preview (external-preview.redd.it) — no hotlink restriction
     //  2. redgifs oembed poster (media.redgifs.com) — needs no-referrer on <img>
     //  3. item.thumbnail field
-    const thumbUrl: string =
-      item.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, '&') ??
-      (oembedThumb || undefined) ??
-      (typeof item.thumbnail === 'string' && item.thumbnail.startsWith('https://')
+    const fromPreview = item.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, '&')
+    const fromThumbnail =
+      typeof item.thumbnail === 'string' && item.thumbnail.startsWith('https://')
         ? item.thumbnail
-        : '')
+        : ''
+    const thumbUrl = fromPreview || oembedThumb || fromThumbnail
 
     return [
       {
@@ -205,6 +191,7 @@ export const getPosts = async (
 
   const extracted = posts.flatMap((post) => extractPosts(post, subreddit))
 
-  // Drop posts where we still have no thumbnail (card would be invisible anyway)
-  return extracted.filter((p) => p.url)
+  // Drop posts where we still have no thumbnail (card would be invisible anyway).
+  // Redgifs can still be opened from the play button when the cover is missing.
+  return extracted.filter((p) => p.url || p.embedUrl)
 }
