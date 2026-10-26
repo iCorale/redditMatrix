@@ -28,7 +28,7 @@ window.fetch = async function (input, init) {
 
   try {
     const body = await askExtension(url)
-    if (body?.data?.children) {
+    if (body?.data && Array.isArray(body.data.children)) {
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { 'content-type': 'application/json' }
@@ -37,8 +37,8 @@ window.fetch = async function (input, init) {
   } catch (err) {
     console.error(err)
   }
-  return new Response(JSON.stringify({ data: { children: [] } }), {
-    status: 200,
+  return new Response(JSON.stringify({ error: true }), {
+    status: 502,
     headers: { 'content-type': 'application/json' }
   })
 }

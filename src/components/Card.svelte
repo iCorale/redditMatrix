@@ -1,5 +1,6 @@
 <script lang="ts" context="module">
   import { mode } from '@store/app'
+  import { feedLeaping } from '@store/feed'
   import { get, writable, derived } from 'svelte/store'
   const cards = writable([])
 
@@ -43,29 +44,50 @@
   export let checked = writable<boolean>(false)
   export let title: string, url: string
   export let isEmbed: boolean = false
-  let card: HTMLImageElement
+  /** Attach the original only while this card is on screen or pinned. */
+  export let active = false
+  export let width = 0
+  export let height = 0
   let missing = !url
+  let loaded = false
+  let learnedW = 0
+  let learnedH = 0
+  let heldW = 0
+  let heldH = 0
+
+  $: if (!active && loaded) loaded = false
+  // Learning a ratio mid-leap resizes the column and makes the glide hitch.
+  $: if (!$feedLeaping && heldW > 0) {
+    learnedW = heldW
+    learnedH = heldH
+    heldW = 0
+    heldH = 0
+  }
+  $: ratioCss =
+    learnedW > 0 && learnedH > 0
+      ? `${learnedW} / ${learnedH}`
+      : width > 0 && height > 0
+        ? `${width} / ${height}`
+        : '1 / 1'
 
   // Icons
   import Check from '~icons/mdi/check-circle'
 
-  // Methods
-  /* checkSize:
-  Checks if the image size is known.
-   */
-  function checkSize() {
-    if (missing) return
-    if (card?.naturalWidth) {
-      card.style.aspectRatio = 'auto'
-    } else {
-      requestAnimationFrame(checkSize)
+  function learn(e: Event) {
+    const img = e.currentTarget as HTMLImageElement
+    loaded = true
+    if (!(width > 0 && height > 0) && img.naturalWidth > 0) {
+      if (get(feedLeaping)) {
+        heldW = img.naturalWidth
+        heldH = img.naturalHeight
+      } else {
+        learnedW = img.naturalWidth
+        learnedH = img.naturalHeight
+      }
     }
+    dispatch('load', e)
   }
-  requestAnimationFrame(checkSize)
 
-  /* checkSize:
-    // TODO: Write docs
-   */
   async function handleSelection(click = false) {
     if ($selectedCards > 1 && !click) {
       return
@@ -103,7 +125,8 @@
   <div
     class="img"
     class:dim={$checked}
-    class:placeholder={missing}
+    class:pending={!loaded || missing}
+    style="aspect-ratio: {ratioCss}"
     use:longpress={{ callback: handleSelection }}
     on:click={() => {
       if ($mode === 'selection') {
@@ -114,18 +137,17 @@
     }}
   >
     <div class="backdrop" />
-    <img
-      bind:this={card}
-      loading="lazy"
-      referrerpolicy="no-referrer"
-      on:error|once={() => {
-        missing = true
-        card.style.visibility = 'hidden'
-      }}
-      on:load
-      alt={title}
-      src={url || undefined}
-    />
+    {#if active && url && !missing}
+      <img
+        referrerpolicy="no-referrer"
+        on:error|once={() => {
+          missing = true
+        }}
+        on:load={learn}
+        alt={title}
+        src={url}
+      />
+    {/if}
   </div>
 </section>
 
@@ -166,9 +188,8 @@
   div.img {
     display: grid;
     width: 100%;
-    &.placeholder {
-      aspect-ratio: 1;
-      background: #1a1a1a;
+    &.pending {
+      background: color-mix(in srgb, var(--foreground-color) 12%, var(--background-color));
     }
     &.dim {
       div.backdrop {
@@ -185,8 +206,9 @@
   }
   img {
     grid-area: 1 / -1;
-    aspect-ratio: 1;
     display: block;
     width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 </style>

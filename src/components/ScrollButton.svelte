@@ -1,6 +1,7 @@
 <script lang="ts">
   import ChevronUp from '~icons/mdi/chevron-up'
   import ChevronDown from '~icons/mdi/chevron-down'
+  import { feedBound, feedLeaping, feedPhase, requestFeedJump } from '@store/feed'
 
   const SHOW_THRESHOLD = 200   // scrollY must exceed this before button appears
   const DIR_THRESHOLD  = 150   // cumulative px in one direction to flip the icon
@@ -11,9 +12,26 @@
   let direction: 'down' | 'up' = 'down'
 
   $: visible = scrollY > SHOW_THRESHOLD
+  $: goingUp = $feedPhase === 'ended' || direction === 'up'
+  $: withinOneLeap =
+    typeof window !== 'undefined' && scrollY <= window.innerHeight * 6
+  $: label =
+    $feedPhase === 'preparing' && !goingUp
+      ? '正在准备下一段'
+      : goingUp
+        ? !$feedBound || withinOneLeap
+          ? '回到顶部'
+          : '往上跳一段'
+        : $feedBound
+          ? '往下跳一段'
+          : '滚到底部'
 
-  // Called on every scroll event via svelte:window bind
-  $: {
+  // The leap animation scrolls past the direction threshold. Ignore it, or one
+  // tap would flip the button before the user can tap again.
+  $: if ($feedLeaping || Math.abs(scrollY - prevScrollY) > (typeof window === 'undefined' ? 800 : window.innerHeight)) {
+    prevScrollY = scrollY
+    accumulated = 0
+  } else {
     const delta = scrollY - prevScrollY
     if (delta !== 0) {
       accumulated += delta
@@ -31,11 +49,16 @@
   }
 
   function handleClick() {
-    if (direction === 'up') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else {
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
+    if ($feedPhase === 'preparing' && !goingUp) return
+    if (!$feedBound) {
+      if (goingUp) window.scrollTo({ top: 0, behavior: 'smooth' })
+      else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
+      return
     }
+    direction = goingUp ? 'up' : 'down'
+    accumulated = 0
+    prevScrollY = scrollY
+    requestFeedJump(direction)
   }
 </script>
 
@@ -46,9 +69,12 @@
   <button
     class="scroll-btn"
     on:click={handleClick}
-    title={direction === 'up' ? '回到顶部' : '滚到底部'}
+    title={label}
+    aria-busy={$feedPhase === 'preparing'}
   >
-    {#if direction === 'up'}
+    {#if $feedPhase === 'preparing' && !goingUp}
+      <span class="spin" aria-hidden="true" />
+    {:else if goingUp}
       <ChevronUp />
     {:else}
       <ChevronDown />
@@ -88,6 +114,21 @@
 
     &:active {
       transform: scale(0.93);
+    }
+  }
+
+  .spin {
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 

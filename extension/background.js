@@ -14,13 +14,49 @@ function feedUrlFromAppUrl(appUrl) {
   const match = url.pathname.match(/\/r\/([^/]+)\/([^/]+)\.json$/)
   if (!match) return null
   const kind = match[2]
-  if (kind === 'search') return null
-  return {
+  const target = {
     subreddit: decodeURIComponent(match[1]),
     kind,
-    after: url.searchParams.get('after') || ''
+    after: url.searchParams.get('after') || '',
+    query: url.searchParams.get('q') || '',
+    sort: url.searchParams.get('sort') || ''
   }
+  if (kind === 'search' && !target.query) return null
+  return target
 }
+
+const SEARCH_SORTS = new Set(['relevance', 'hot', 'new', 'top', 'comments'])
+
+function searchSort(sort) {
+  if (sort === 'best') return 'relevance'
+  if (sort === 'rising') return 'hot'
+  return SEARCH_SORTS.has(sort) ? sort : 'relevance'
+}
+
+function searchPageUrl(target, cursor) {
+  const feed = new URL(`https://www.reddit.com/svc/shreddit/r/${encodeURIComponent(target.subreddit)}/search/`)
+  feed.searchParams.set('q', target.query)
+  feed.searchParams.set('type', 'posts')
+  feed.searchParams.set('sort', searchSort(target.sort))
+  if (cursor) feed.searchParams.set('cursor', cursor)
+  return feed.toString()
+}
+
+function nextSearchCursor(html, current) {
+  const text = html.replace(/&amp;/g, '&')
+  for (const match of text.matchAll(/[?&]cursor=([^"'&\s]+)/g)) {
+    let value = match[1]
+    try {
+      value = decodeURIComponent(value)
+    } catch {
+      continue
+    }
+    if (value && value !== current) return value
+  }
+  return ''
+}
+
+const searchCursorAfter = new Map()
 
 function feedUrlFor(target, after) {
   const feed = new URL(`https://www.reddit.com/svc/shreddit/community-more-posts/${target.kind}/`)
@@ -92,7 +128,55 @@ async function fetchPartialFromTab(target, feedUrl) {
   return injected?.result ?? null
 }
 
+async function htmlFromTab(target, feedUrl) {
+  let tabId = challengeTabId
+  try {
+    if (tabId != null) await chrome.tabs.get(tabId)
+    else throw new Error('no tab')
+  } catch {
+    const tab = await chrome.tabs.create({
+      url: `https://www.reddit.com/r/${target.subreddit}/`,
+      active: false
+    })
+    tabId = tab.id
+    challengeTabId = tabId
+    await waitForTab(tabId)
+  }
+  const [injected] = await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [feedUrl, PARTIAL],
+    func: async (feedUrl, accept) => {
+      const res = await fetch(feedUrl, {
+        credentials: 'include',
+        headers: { Accept: accept }
+      })
+      return res.text()
+    }
+  })
+  return injected?.result || ''
+}
+
+async function searchBatch(target, after) {
+  const key = `${target.subreddit}\n${target.query}\n${searchSort(target.sort)}`
+  const cursorKey = `${key}\n${after}`
+  if (after && !searchCursorAfter.has(cursorKey)) return []
+  const cursor = after ? searchCursorAfter.get(cursorKey) : ''
+  const pageUrl = searchPageUrl(target, cursor)
+  let html = await fetchPartial(pageUrl)
+  let posts = parseSearchPosts(html)
+  if (!posts) {
+    html = await htmlFromTab(target, pageUrl)
+    posts = parseSearchPosts(html)
+  }
+  if (!posts) return null
+  const next = nextSearchCursor(html, cursor)
+  const lastName = posts[posts.length - 1]?.data?.name
+  if (next && lastName) searchCursorAfter.set(`${key}\n${lastName}`, next)
+  return posts
+}
+
 async function postsFrom(target, after) {
+  if (target.kind === 'search') return searchBatch(target, after)
   const feedUrl = feedUrlFor(target, after)
   const direct = parsePosts(await fetchPartial(feedUrl))
   if (direct) return direct
@@ -202,7 +286,8 @@ async function listingFor(appUrl) {
   let after = target.after
   for (let page = 0; page < MAX_PAGES && children.length < PAGE_TARGET; page++) {
     const batch = await postsFrom(target, after)
-    if (!batch?.length) break
+    if (batch == null) return children.length ? { data: { children } } : null
+    if (!batch.length) break
     const before = children.length
     for (const child of batch) {
       const name = child?.data?.name
@@ -211,9 +296,12 @@ async function listingFor(appUrl) {
       children.push(child)
     }
     if (children.length === before) break
-    after = children[children.length - 1].data.name
+    after =
+      target.kind === 'search'
+        ? batch[batch.length - 1]?.data?.name || after
+        : children[children.length - 1].data.name
   }
-  if (!children.length) return null
+  if (!children.length) return { data: { children: [] } }
 
   await attachRedgifsPosters(children)
   return { data: { children } }

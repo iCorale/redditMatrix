@@ -14,6 +14,17 @@ function attr(tag, name) {
   return match ? decodeEntities(match[1]) : ''
 }
 
+function boxOfId(fragment, id) {
+  if (!id) return null
+  const safe = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = fragment.match(new RegExp('<img\\b[^>]*' + safe + '[^>]*>', 'i'))
+  if (!match) return null
+  const x = Number(attr(match[0], 'width'))
+  const y = Number(attr(match[0], 'height'))
+  if (!(x > 0 && y > 0)) return null
+  return { x, y }
+}
+
 function splitTag(fragment) {
   let quote = ''
   for (let i = 0; i < fragment.length; i++) {
@@ -154,11 +165,12 @@ function parsePosts(html) {
       seen.add(name)
       const media_metadata = {}
       for (const image of images) {
+        const box = boxOfId(tag + body, image.id)
         media_metadata[image.id] = {
           status: 'valid',
           e: 'Image',
           m: mimeFor(image.ext),
-          s: { u: image.url },
+          s: box ? { u: image.url, x: box.x, y: box.y } : { u: image.url },
           p: [{ x: 1080, u: image.url }]
         }
       }
@@ -188,6 +200,11 @@ function parsePosts(html) {
         over_18: nsfw
       }
       if (poster) data.preview = { images: [{ source: { url: poster } }] }
+      const box = boxOfId(tag + body, slug)
+      if (box) {
+        data.width = box.x
+        data.height = box.y
+      }
       children.push({ data })
       continue
     }
@@ -195,6 +212,110 @@ function parsePosts(html) {
     const direct = images[0]?.url || (/^https?:\/\/i\.redd\.it\//i.test(href) ? href : '')
     if (!direct) continue
     seen.add(name)
+    const single = {
+      name,
+      title,
+      url: direct,
+      is_self: false,
+      over_18: nsfw
+    }
+    const box = boxOfId(tag + body, images[0]?.id || '')
+    if (box) {
+      single.width = box.x
+      single.height = box.y
+    }
+    children.push({ data: single })
+  }
+
+  return children
+}
+
+function trackerSlice(html, thingIndex) {
+  const start = html.lastIndexOf('<search-telemetry-tracker', thingIndex)
+  if (start < 0) return ''
+  const open = '<search-telemetry-tracker'
+  const close = '</search-telemetry-tracker>'
+  let depth = 0
+  let i = start
+  while (i < html.length) {
+    const nextOpen = html.indexOf(open, i)
+    const nextClose = html.indexOf(close, i)
+    if (nextClose < 0) break
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++
+      i = nextOpen + open.length
+      continue
+    }
+    depth--
+    i = nextClose + close.length
+    if (depth === 0) return html.slice(start, i)
+  }
+  return ''
+}
+
+function parseSearchPosts(html) {
+  if (!html || html.includes('Prove your humanity')) return null
+  if (!html.includes('data-thingid="t3_')) return []
+  const children = []
+  const seen = new Set()
+  const re = /data-thingid="(t3_[a-z0-9]+)"/gi
+  let match
+  while ((match = re.exec(html))) {
+    const name = match[1]
+    if (seen.has(name)) continue
+    const slice = decodeEntities(trackerSlice(html, match.index))
+    if (!slice) continue
+    const titleMatch = slice.match(/"title"\s*:\s*"((?:\\.|[^"\\])*)"/)
+    const title = titleMatch
+      ? titleMatch[1]
+          .replace(/\\"/g, '"')
+          .replace(/\\u([0-9a-f]{4})/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+      : ''
+    const nsfw = /"nsfw"\s*:\s*true/.test(slice.slice(0, 2500))
+    const slug = redgifsSlug(slice)
+    const images = collectImages(slice)
+    if (slug) {
+      seen.add(name)
+      const poster = coverUrl(slice) || images[0]?.url || ''
+      const data = {
+        name,
+        title,
+        url: `https://www.redgifs.com/watch/${slug}`,
+        is_self: false,
+        over_18: nsfw
+      }
+      if (poster) data.preview = { images: [{ source: { url: poster } }] }
+      children.push({ data })
+      continue
+    }
+    const direct = images[0]?.url
+    if (!direct) continue
+    seen.add(name)
+    if (images.length > 1) {
+      const media_metadata = {}
+      for (const image of images) {
+        media_metadata[image.id] = {
+          status: 'valid',
+          e: 'Image',
+          m: mimeFor(image.ext),
+          s: { u: image.url },
+          p: [{ x: 1080, u: image.url }]
+        }
+      }
+      children.push({
+        data: {
+          name,
+          title,
+          url: direct,
+          is_self: false,
+          over_18: nsfw,
+          is_gallery: true,
+          gallery_data: { items: images.map((image) => ({ media_id: image.id })) },
+          media_metadata
+        }
+      })
+      continue
+    }
     children.push({
       data: {
         name,
@@ -205,6 +326,5 @@ function parsePosts(html) {
       }
     })
   }
-
   return children
 }

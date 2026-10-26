@@ -28,8 +28,8 @@
 | **关闭 Lightbox 自动定位** | 关闭后页面平滑滚动至最后查看的图片并高亮轮廓；距离近时 ease-in-out 缓动，距离远时瞬间跳转 + 轮廓环闪烁 |
 | **Redgifs 内容支持** | 识别 `redgifs.com` 链接，瀑布流展示缩略图（标注播放图标），Lightbox 内通过 iframe 嵌入播放 |
 | **多图 Gallery 支持** | Reddit 多图帖子展开为独立卡片，Lightbox 内可左右切换 |
-| **无限滚动加载** | 滚动到底部自动加载下一页（`svelte-infinite-loading`）；去重保护防止分页重叠 |
-| **滚动快捷按钮** | 浮动按钮根据滚动方向显示"到顶部"或"到底部"箭头 |
+| **继续加载** | 已摆开的卡片接近用完时再向 Reddit 要下一页；同一时间只有一个请求。新帖先去重再追加 |
+| **滚动快捷按钮** | 在版块页一次跳过大约 6 屏。本地内容不够时停住等待，不会自己跳。靠近顶部时向上变为回到顶部；列表真正结束时，再向下会到末尾并变成回到顶部 |
 | **版块搜索** | 支持在指定 subreddit 内关键词搜索 |
 | **版块收藏列表** | 首页维护自定义版块列表，支持长按选择批量操作 |
 | **模糊搜索** | 版块名称模糊补全，由 Rust 编译的 WASM 模块提供，运行在 Web Worker 中 |
@@ -57,7 +57,7 @@ redditMatrix/
 │   │   ├── Card.svelte          # 单张图片卡片（含长按选择、播放角标）
 │   │   ├── Grid.svelte          # 瀑布流网格，集成 Lightbox 与预加载逻辑
 │   │   ├── Lightbox.svelte      # 全屏大图预览（缩放/平移/Redgifs iframe）
-│   │   ├── ScrollButton.svelte  # 浮动滚动快捷按钮（顶部/底部）
+│   │   ├── ScrollButton.svelte  # 浮动按钮：按屏跳过一段，或回到顶部
 │   │   ├── List.svelte          # 版块列表项
 │   │   ├── CancellableList.svelte
 │   │   ├── Results.svelte       # 搜索结果展示
@@ -126,8 +126,8 @@ Grid.svelte → Card.svelte × N
     │              │ on:view（打开 Lightbox）
     │              │ on:needMore（Lightbox 接近末尾，触发后台预加载）
     ▼              ▼
-svelte-infinite-loading    Lightbox.svelte
-（滚动触发加载）              ├── 图片：fullUrl → url fallback
+接近已摆开内容的末尾时         Lightbox.svelte
+Grid 派发 needMore            ├── 图片：fullUrl → url fallback
                              ├── Redgifs：<iframe embedUrl>
                              └── 关闭 → Grid.closeLightbox()
                                           → 平滑滚动 + 轮廓高亮定位
@@ -147,7 +147,6 @@ svelte-infinite-loading    Lightbox.svelte
 | 图标 | unplugin-icons + @iconify-json/mdi | — |
 | 样式 | Sass/SCSS (modern-compiler API) | ^1.99 |
 | 瀑布流 | @appnest/masonry-layout | ^2.0 |
-| 无限滚动 | svelte-infinite-loading | ^1.4 |
 | 模糊搜索 | Rust → WASM (wasm-pack) + Comlink Web Worker | — |
 | 列表读取 | Chrome 扩展（extension/） | MV3 |
 | 原生移动端 | Capacitor | ^3.2 |
@@ -288,7 +287,7 @@ Capacitor 依赖锁定在 v3（`^3.2.5`）。升级至 v4/v5 需要同步修改 
 
 每个 subreddit 的排序偏好独立存储在 `localStorage`，key 格式为 `redditMatrix:sort:<subreddit>`。切换版块时自动恢复上次使用的排序方式。
 
-点击**已选中的排序 Tab** 会递增 `refreshSignal` store，触发 `[subreddit].svelte` 中的 `identifier` 变化，从而使 `svelte-infinite-loading` 重置并从第一页重新加载内容。
+点击**已选中的排序 Tab** 会递增 `refreshSignal` store，触发 `[subreddit].svelte` 中的 `identifier` 变化，清空当前帖子并从第一页重新加载。
 
 ### 10. Lightbox 预加载与无限浏览
 

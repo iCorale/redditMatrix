@@ -1,8 +1,6 @@
 <script lang="ts">
   // components
   import Grid from '@components/Grid.svelte'
-  import InfiniteLoading from 'svelte-infinite-loading'
-  import type { InfiniteEvent } from 'svelte-infinite-loading'
   import '@material/mwc-circular-progress'
 
   // props/stores
@@ -15,23 +13,33 @@
   import { onDestroy, onMount, tick } from 'svelte'
 
   let _fetchInFlight = false
+  let fetching = false
+  let feedDone = false
+  // Bumped when the feed identity changes so a late response cannot append
+  // onto the next subreddit, sort, or refresh.
+  const epoch = { n: 0 }
 
   /**
    * Fetches the next page of posts and appends them to the store.
-   * Returns true if new posts were added, false if the feed is exhausted.
-   * Guards against concurrent calls with _fetchInFlight.
+   * `true` when new posts were added, `false` when the feed is exhausted,
+   * `error` when the listing could not be read, `busy` when a request is
+   * already running, `stale` when the feed changed.
    */
-  async function fetchNextPage(): Promise<boolean> {
-    if (_fetchInFlight) return false
+  async function fetchNextPage(): Promise<boolean | 'busy' | 'stale' | 'error'> {
+    if (_fetchInFlight) return 'busy'
     _fetchInFlight = true
+    const gen = epoch.n
     try {
       // Use postName as pagination cursor (gallery composite ids are invalid "after" values)
       const after = $posts.length ? $posts[$posts.length - 1].postName : ''
       const data = await getPosts($params.subreddit, $params.q ?? '', after, $sort)
+      if (gen !== epoch.n) return 'stale'
+      if (data === false) return 'error'
       if (!Array.isArray(data) || !data.length) return false
       const existingIds = new Set($posts.map((p) => p.id))
       const fresh = data.filter((p) => !existingIds.has(p.id))
       if (!fresh.length) return false
+      if (gen !== epoch.n) return 'stale'
       $posts = [...$posts, ...fresh]
       return true
     } finally {
@@ -39,22 +47,17 @@
     }
   }
 
-  const handleInfinite = async (e: InfiniteEvent) => {
+  /** Called when the laid-out runway or the Lightbox needs another listing page. */
+  async function handleNeedMore() {
+    if (fetching) return
+    fetching = true
     try {
-      const hasMore = await fetchNextPage()
-      if (hasMore) {
-        setTimeout(e.detail.loaded, 1500)
-      } else {
-        e.detail.complete()
-      }
-    } catch {
-      setTimeout(e.detail.error, 1500)
+      const more = await fetchNextPage()
+      if (more === 'busy' || more === 'stale' || more === 'error') return
+      if (!more) feedDone = true
+    } finally {
+      fetching = false
     }
-  }
-
-  /** Called by Grid when the Lightbox approaches the last loaded post. */
-  function handleNeedMore() {
-    fetchNextPage() // fire-and-forget; store update triggers Grid reactivity
   }
 
   async function handleKeyPress(e: KeyboardEvent) {
@@ -111,23 +114,32 @@
     localStorage.setItem(SORT_KEY(_activeSub), $sort)
   }
 
-  // identifier drives InfiniteLoading reset: change in sort, subreddit, query,
-  // or refreshSignal all clear posts and restart from the first page.
+  // Change in sort, subreddit, query, or refreshSignal clears the feed and
+  // starts again from the first page.
   $: identifier = `${$params.subreddit}|${$params.q ?? ''}|${$sort}|${$refreshSignal}`
-  $: {
-    identifier
+  let seenIdentifier = ''
+  $: if (identifier !== seenIdentifier) {
+    seenIdentifier = identifier
+    epoch.n += 1
     $posts = []
+    feedDone = false
   }
 </script>
 
-<Grid posts={$posts} on:needMore={handleNeedMore} />
-<div style="padding: 1rem 0">
-  <InfiniteLoading {identifier} on:infinite={handleInfinite}>
-    <svelte:fragment slot="spinner">
-      <mwc-circular-progress
-        style="--mdc-theme-primary:var(--accent-color)"
-        indeterminate
-      />
-    </svelte:fragment>
-  </InfiniteLoading>
-</div>
+<Grid posts={$posts} done={feedDone} {fetching} on:needMore={handleNeedMore} />
+{#if fetching && !feedDone}
+  <div class="more">
+    <mwc-circular-progress
+      style="--mdc-theme-primary:var(--accent-color)"
+      indeterminate
+    />
+  </div>
+{/if}
+
+<style>
+  .more {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+  }
+</style>

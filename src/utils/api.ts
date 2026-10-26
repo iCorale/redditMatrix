@@ -15,6 +15,9 @@ export type Post = {
   fullUrl?: string
   /** iframe embed URL for video/gif posts (redgifs). Lightbox shows an iframe. */
   embedUrl?: string
+  /** Pixel size when known. The grid reserves a box before the original loads. */
+  width?: number
+  height?: number
 }
 
 /**
@@ -37,6 +40,22 @@ async function redditGet(
   } catch {
     return false
   }
+}
+
+/** Width and height from a post or its preview, when Reddit provided both. */
+function pixelSize(item: any): { width?: number; height?: number } {
+  const source = item?.preview?.images?.[0]?.source
+  const width = Number(item?.width ?? source?.width)
+  const height = Number(item?.height ?? source?.height)
+  if (!(width > 0 && height > 0)) return {}
+  return { width, height }
+}
+
+function pixelSizeMeta(meta: any): { width?: number; height?: number } {
+  const width = Number(meta?.s?.x)
+  const height = Number(meta?.s?.y)
+  if (!(width > 0 && height > 0)) return {}
+  return { width, height }
 }
 
 /** Map Reddit MIME type to file extension */
@@ -107,7 +126,8 @@ function extractPosts(raw: any, subreddit: string): Post[] {
         postName: item.name,
         title: item.title,
         url: thumbnailUrl,
-        fullUrl
+        fullUrl,
+        ...pixelSizeMeta(meta)
       })
     }
 
@@ -151,7 +171,8 @@ function extractPosts(raw: any, subreddit: string): Post[] {
         postName: item.name,
         title: item.title,
         url: thumbUrl,
-        embedUrl: `https://www.redgifs.com/ifr/${slug}`
+        embedUrl: `https://www.redgifs.com/ifr/${slug}`,
+        ...pixelSize(item)
       }
     ]
   }
@@ -160,7 +181,7 @@ function extractPosts(raw: any, subreddit: string): Post[] {
   // Skip gallery index pages that slipped through
   if (item.url.startsWith('https://www.reddit.com/gallery')) return []
 
-  return [{ id: item.name, postName: item.name, title: item.title, url: item.url }]
+  return [{ id: item.name, postName: item.name, title: item.title, url: item.url, ...pixelSize(item) }]
 }
 
 export const getPosts = async (
