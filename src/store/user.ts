@@ -26,6 +26,12 @@ function nativeStorageStore<T>(key: string, default_value: T) {
 }
 
 export const subreddits = nativeStorageStore<string[]>('subreddits', [])
+
+export function rememberSubreddit(name: string) {
+  const key = name.trim().toLowerCase()
+  if (!key) return
+  subreddits.update((items) => [key, ...items.filter((item) => item !== key)])
+}
 export const searches = nativeStorageStore<string[]>('searches', [])
 
 export type Theme = {

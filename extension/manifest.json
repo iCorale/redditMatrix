@@ -3,9 +3,10 @@
   "name": "Reddit Matrix Bridge",
   "version": "1.0.0",
   "description": "Loads Reddit feeds inside your logged-in browser for Reddit Matrix.",
-  "permissions": ["tabs", "scripting"],
+  "permissions": ["tabs", "scripting", "storage"],
   "host_permissions": [
     "https://www.reddit.com/*",
+    "https://theporndude.com/*",
     "https://api.redgifs.com/*",
     "https://icorale.github.io/*",
     "http://localhost/*",

@@ -57,6 +57,35 @@ function nextSearchCursor(html, current) {
 }
 
 const searchCursorAfter = new Map()
+const SEARCH_END = 'rm:end'
+
+function searchCursorKey(target, after) {
+  return `${target.subreddit}\n${target.query}\n${searchSort(target.sort)}\n${after}`
+}
+
+function rememberSearchCursors(target, posts, next) {
+  const value = next || SEARCH_END
+  const stored = {}
+  for (const post of posts) {
+    const name = post?.data?.name
+    if (!name) continue
+    const key = searchCursorKey(target, name)
+    searchCursorAfter.set(key, value)
+    stored[key] = value
+  }
+  if (Object.keys(stored).length) {
+    chrome.storage.session.set(stored).catch((err) => console.error(err))
+  }
+}
+
+async function searchCursorFor(target, after) {
+  const key = searchCursorKey(target, after)
+  if (searchCursorAfter.has(key)) return searchCursorAfter.get(key)
+  const stored = await chrome.storage.session.get(key)
+  if (!Object.prototype.hasOwnProperty.call(stored, key)) return ''
+  searchCursorAfter.set(key, stored[key])
+  return stored[key]
+}
 
 function feedUrlFor(target, after) {
   const feed = new URL(`https://www.reddit.com/svc/shreddit/community-more-posts/${target.kind}/`)
@@ -157,10 +186,13 @@ async function htmlFromTab(target, feedUrl) {
 }
 
 async function searchBatch(target, after) {
-  const key = `${target.subreddit}\n${target.query}\n${searchSort(target.sort)}`
-  const cursorKey = `${key}\n${after}`
-  if (after && !searchCursorAfter.has(cursorKey)) return []
-  const cursor = after ? searchCursorAfter.get(cursorKey) : ''
+  let cursor = ''
+  if (after) {
+    const saved = await searchCursorFor(target, after)
+    if (!saved) return null
+    if (saved === SEARCH_END) return []
+    cursor = saved
+  }
   const pageUrl = searchPageUrl(target, cursor)
   let html = await fetchPartial(pageUrl)
   let posts = parseSearchPosts(html)
@@ -169,9 +201,7 @@ async function searchBatch(target, after) {
     posts = parseSearchPosts(html)
   }
   if (!posts) return null
-  const next = nextSearchCursor(html, cursor)
-  const lastName = posts[posts.length - 1]?.data?.name
-  if (next && lastName) searchCursorAfter.set(`${key}\n${lastName}`, next)
+  rememberSearchCursors(target, posts, nextSearchCursor(html, cursor))
   return posts
 }
 
@@ -277,6 +307,52 @@ async function attachRedgifsPosters(children) {
   )
 }
 
+const NSFW_LIST_URL = 'https://theporndude.com/best-nsfw-reddit-sites'
+
+function isNsfwDirectory(appUrl) {
+  return /^https:\/\/theporndude\.com\/best-nsfw-reddit-sites\/?(\?|$)/i.test(appUrl || '')
+}
+
+function minorNamed(name) {
+  const n = String(name).toLowerCase()
+  if (n.includes('teen') && !n.includes('fifteen')) return true
+  if (n.includes('schoolgirl')) return true
+  if (n.includes('jailbait') || n.includes('underage') || n.includes('preteen')) return true
+  if (n.includes('barelylegal') || n.includes('barely_legal')) return true
+  if (n.includes('lolita') || /(^|[^a-z])loli([^a-z]|$)/.test(n)) return true
+  if (n.includes('shota')) return true
+  if (n.includes('pedo') && !n.includes('torpedo')) return true
+  if (n.includes('fauxbait')) return true
+  if (n.includes('child')) return true
+  if (/(^|[^a-z])kids?([^a-z]|$)/.test(n)) return true
+  if (/(^|[^a-z0-9])(1[0-9])([^a-z0-9]|$)/.test(n)) return true
+  if (/[a-z](1[0-9])$/.test(n)) return true
+  if (/^(1[0-9])/.test(n)) return true
+  return false
+}
+
+function nsfwNamesFromHtml(html) {
+  const names = []
+  const seen = new Set()
+  const re = /data-external-link="https?:\/\/(?:www\.)?reddit\.com\/r\/([^"/?#]+)\/?"/gi
+  let match
+  while ((match = re.exec(html))) {
+    const name = match[1]
+    if (!name || seen.has(name) || minorNamed(name)) continue
+    if (!/^[A-Za-z0-9_]+$/.test(name)) continue
+    seen.add(name)
+    names.push(name)
+  }
+  return names
+}
+
+async function nsfwDirectory() {
+  const res = await fetch(NSFW_LIST_URL, { headers: { Accept: 'text/html' } })
+  if (!res.ok) return null
+  const names = nsfwNamesFromHtml(await res.text())
+  return names.length ? { names } : null
+}
+
 async function listingFor(appUrl) {
   const target = feedUrlFromAppUrl(appUrl)
   if (!target) return null
@@ -309,7 +385,8 @@ async function listingFor(appUrl) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'rm-req') return
-  listingFor(message.url)
+  const job = isNsfwDirectory(message.url) ? nsfwDirectory() : listingFor(message.url)
+  job
     .then((body) => sendResponse({ body }))
     .catch((err) => {
       console.error(err)

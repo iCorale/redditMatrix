@@ -4,6 +4,10 @@ function isListing(url) {
   return /\/r\/[^/]+\/[^/]+\.json(\?|$)/.test(url)
 }
 
+function isNsfwDirectory(url) {
+  return /^https:\/\/theporndude\.com\/best-nsfw-reddit-sites\/?(\?|$)/i.test(url)
+}
+
 function askExtension(url) {
   return new Promise((resolve) => {
     const id = Math.random().toString(36).slice(2)
@@ -24,10 +28,22 @@ function askExtension(url) {
 
 window.fetch = async function (input, init) {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  if (!isListing(url)) return originalFetch(input, init)
+  if (!isListing(url) && !isNsfwDirectory(url)) return originalFetch(input, init)
 
   try {
     const body = await askExtension(url)
+    if (isNsfwDirectory(url)) {
+      if (Array.isArray(body?.names)) {
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      }
+      return new Response(JSON.stringify({ error: true }), {
+        status: 502,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
     if (body?.data && Array.isArray(body.data.children)) {
       return new Response(JSON.stringify(body), {
         status: 200,
