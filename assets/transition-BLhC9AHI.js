@@ -1,0 +1,1 @@
+function a(n){const t=n-1;return t*t*t+1}function s(n){return Math.sin(-13*(n+1)*Math.PI/2)*Math.pow(2,-10*n)+1}function i(n,t){const e=getComputedStyle(n).transform.replace("none","");return{delay:t.delay||0,duration:t.duration||1e3,easing:t.easing||s,css:(o,r)=>`transform: rotate(${90*r}deg) ${e} scale(${o})`}}export{a as c,i as s};

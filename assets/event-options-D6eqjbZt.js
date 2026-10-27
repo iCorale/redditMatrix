@@ -1,0 +1,5 @@
+import{S as g,i as h,s as m,F as l,n as o,d as _,G as c,H as v,a as d,I as f,J as u}from"./index-DBz0p4Qx.js";import{j as S}from"./style-map-DG_vxhOb.js";function p(s){let e,a='<path fill="currentColor" d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5l-1.5 1.5l-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16A6.5 6.5 0 0 1 3 9.5A6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14S14 12 14 9.5S12 5 9.5 5"/>',n=[{viewBox:"0 0 24 24"},{width:"1.2em"},{height:"1.2em"},s[0]],i={};for(let t=0;t<n.length;t+=1)i=l(i,n[t]);return{c(){e=f("svg"),c(e,i)},m(t,r){d(t,e,r),e.innerHTML=a},p(t,[r]){c(e,i=v(n,[{viewBox:"0 0 24 24"},{width:"1.2em"},{height:"1.2em"},r&1&&t[0]]))},i:o,o,d(t){t&&_(e)}}}function w(s,e,a){return s.$$set=n=>{a(0,e=l(l({},e),u(n)))},e=u(e),[e]}class C extends g{constructor(e){super(),h(this,e,w,p,m,{})}}/**
+ * @license
+ * Copyright 2017 Google LLC
+ * SPDX-License-Identifier: BSD-3-Clause
+ */function b(s){return S({finisher:(e,a)=>{Object.assign(e.prototype[a],s)}})}export{C as S,b as e};
