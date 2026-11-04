@@ -91,11 +91,13 @@
     width: 2.625rem;
     height: 2.625rem;
     border-radius: 50%;
-    border: none;
-    background: var(--background-color, #1e1e1e);
+    border: 1px solid color-mix(in srgb, var(--foreground-color) 22%, transparent);
+    background: color-mix(in srgb, var(--background-color) 58%, transparent);
     box-shadow:
-      0 1px 4px rgba(0, 0, 0, 0.25),
-      0 4px 16px rgba(0, 0, 0, 0.2);
+      0 8px 28px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 color-mix(in srgb, var(--foreground-color) 22%, transparent);
+    backdrop-filter: blur(26px) saturate(1.8);
+    -webkit-backdrop-filter: blur(26px) saturate(1.8);
     color: var(--foreground-color, #fff);
     cursor: pointer;
     display: flex;
@@ -107,9 +109,6 @@
 
     &:hover {
       transform: scale(1.08);
-      box-shadow:
-        0 2px 8px rgba(0, 0, 0, 0.3),
-        0 6px 20px rgba(0, 0, 0, 0.25);
     }
 
     &:active {

@@ -179,6 +179,7 @@ async function htmlFromTab(target, feedUrl) {
         credentials: 'include',
         headers: { Accept: accept }
       })
+      if (!res.ok) return ''
       return res.text()
     }
   })
@@ -313,6 +314,68 @@ function isNsfwDirectory(appUrl) {
   return /^https:\/\/theporndude\.com\/best-nsfw-reddit-sites\/?(\?|$)/i.test(appUrl || '')
 }
 
+function isRelatedRequest(appUrl) {
+  return /\/r\/[^/]+\/related\.json(\?|$)/.test(appUrl || '')
+}
+
+function relatedSubreddit(appUrl) {
+  const match = /\/r\/([^/]+)\/related\.json/.exec(appUrl || '')
+  if (!match) return ''
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+function subredditLinkName(href) {
+  const url = String(href || '')
+    .replace(/&amp;/g, '&')
+    .trim()
+  const match =
+    /^(?:https?:\/\/(?:(?:www|old|np)\.)?reddit\.com)?\/r\/([A-Za-z0-9_]+)\/?(?:[?#].*)?$/i.exec(
+      url
+    )
+  return match ? match[1] : ''
+}
+
+function relatedNamesFromHtml(html, current) {
+  const names = []
+  const seen = new Set()
+  const currentKey = String(current || '').toLowerCase()
+  function add(name) {
+    if (!name || !/^[A-Za-z0-9_]+$/.test(name)) return
+    const key = name.toLowerCase()
+    if (key === currentKey || seen.has(key) || minorNamed(name)) return
+    seen.add(key)
+    names.push(name)
+  }
+  const widget = /source="subreddit_list_widget"[\s\S]{0,800}?name="([A-Za-z0-9_]+)"/gi
+  let match
+  while ((match = widget.exec(html))) add(match[1])
+  const menu =
+    /<faceplate-tracker\b[^>]*\bsource="community_menu"[^>]*>[\s\S]*?<\/faceplate-tracker>/gi
+  while ((match = menu.exec(html))) {
+    const href = /href="([^"]+)"/i.exec(match[0])
+    if (href) add(subredditLinkName(href[1]))
+  }
+  return names
+}
+
+function railBlocked(html) {
+  return !html || /Prove your humanity|g-recaptcha|blocked by network security/i.test(html)
+}
+
+async function relatedFor(appUrl) {
+  const name = relatedSubreddit(appUrl)
+  if (!name) return null
+  const feedUrl = `https://www.reddit.com/svc/shreddit/feeds/subreddit-right-rail?name=${encodeURIComponent(name)}&refresh=1`
+  let html = await fetchPartial(feedUrl)
+  if (railBlocked(html)) html = await htmlFromTab({ subreddit: name }, feedUrl)
+  if (railBlocked(html)) return null
+  return { names: relatedNamesFromHtml(html, name) }
+}
+
 function minorNamed(name) {
   const n = String(name).toLowerCase()
   if (n.includes('teen') && !n.includes('fifteen')) return true
@@ -385,7 +448,11 @@ async function listingFor(appUrl) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'rm-req') return
-  const job = isNsfwDirectory(message.url) ? nsfwDirectory() : listingFor(message.url)
+  const job = isNsfwDirectory(message.url)
+    ? nsfwDirectory()
+    : isRelatedRequest(message.url)
+      ? relatedFor(message.url)
+      : listingFor(message.url)
   job
     .then((body) => sendResponse({ body }))
     .catch((err) => {

@@ -216,3 +216,22 @@ export const getPosts = async (
   // Redgifs can still be opened from the play button when the cover is missing.
   return extracted.filter((p) => p.url || p.embedUrl)
 }
+
+/** Related communities from the subreddit's community info. `false` when unread. */
+export async function getRelated(subreddit: string): Promise<string[] | false> {
+  try {
+    const res = await fetch(
+      `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/related.json`
+    )
+    if (!res.ok) return false
+    const json = await res.json()
+    const names = json?.names
+    if (!Array.isArray(names)) return false
+    return names.filter(
+      (name: unknown): name is string =>
+        typeof name === 'string' && /^[A-Za-z0-9_]+$/.test(name)
+    )
+  } catch {
+    return false
+  }
+}

@@ -1,7 +1,11 @@
 const originalFetch = window.fetch.bind(window)
 
+function isRelated(url) {
+  return /\/r\/[^/]+\/related\.json(\?|$)/.test(url)
+}
+
 function isListing(url) {
-  return /\/r\/[^/]+\/[^/]+\.json(\?|$)/.test(url)
+  return /\/r\/[^/]+\/[^/]+\.json(\?|$)/.test(url) && !isRelated(url)
 }
 
 function isNsfwDirectory(url) {
@@ -28,11 +32,11 @@ function askExtension(url) {
 
 window.fetch = async function (input, init) {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  if (!isListing(url) && !isNsfwDirectory(url)) return originalFetch(input, init)
+  if (!isListing(url) && !isRelated(url) && !isNsfwDirectory(url)) return originalFetch(input, init)
 
   try {
     const body = await askExtension(url)
-    if (isNsfwDirectory(url)) {
+    if (isRelated(url) || isNsfwDirectory(url)) {
       if (Array.isArray(body?.names)) {
         return new Response(JSON.stringify(body), {
           status: 200,
