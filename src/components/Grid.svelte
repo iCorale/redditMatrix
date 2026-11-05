@@ -495,6 +495,7 @@
         on:load={handleCardLoad}
         on:view={() => openLightbox(i)}
         url={post.fullUrl ?? post.url}
+        embedUrl={post.embedUrl ?? ''}
         title={post.title}
         isEmbed={!!post.embedUrl}
         active={active[i] ?? false}

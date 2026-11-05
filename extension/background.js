@@ -214,10 +214,20 @@ async function postsFrom(target, after) {
   return fetchPartialFromTab(target, feedUrl)
 }
 
-function watchSlug(child) {
-  const url = child?.data?.url || ''
-  const match = url.match(/redgifs\.com\/watch\/([a-z0-9-]+)/i)
-  return match ? match[1] : ''
+function posterSlug(appUrl) {
+  const match = /[?&]slug=([^&]+)/.exec(appUrl || '')
+  if (!match) return ''
+  let slug = match[1]
+  try {
+    slug = decodeURIComponent(slug)
+  } catch {
+    return ''
+  }
+  return /^[a-z0-9-]+$/i.test(slug) ? slug : ''
+}
+
+function isPosterRequest(appUrl) {
+  return /^https:\/\/www\.reddit\.com\/svc\/rm\/redgifs-poster\.json(?:\?|$)/i.test(appUrl || '')
 }
 
 function stillFromGif(gif) {
@@ -227,6 +237,15 @@ function stillFromGif(gif) {
     if (/\.(mp4|webm|m3u8)(\?|$)/i.test(url)) continue
     return url
   }
+  return ''
+}
+
+function videoFromGif(gif) {
+  const urls = gif?.urls || {}
+  const hd = urls.hd
+  const sd = urls.sd
+  if (typeof hd === 'string' && hd.startsWith('https://') && /\.mp4(\?|$)/i.test(hd)) return hd
+  if (typeof sd === 'string' && sd.startsWith('https://') && /\.mp4(\?|$)/i.test(sd)) return sd
   return ''
 }
 
@@ -255,57 +274,33 @@ async function posterForSlug(slug, token) {
     }
   })
   if (res.status === 401) return { unauthorized: true, poster: '' }
-  if (!res.ok) return { unauthorized: false, poster: '' }
+  if (!res.ok) return { unauthorized: false, poster: '', video: '' }
   const json = await res.json()
-  return { unauthorized: false, poster: stillFromGif(json?.gif) }
+  return { unauthorized: false, poster: stillFromGif(json?.gif), video: videoFromGif(json?.gif) }
 }
 
-async function attachRedgifsPosters(children) {
-  const need = children.filter((child) => watchSlug(child))
-  if (!need.length) return
-
+async function onePoster(appUrl) {
+  const slug = posterSlug(appUrl)
+  if (!slug) return null
   let token
   try {
     token = await redgifsToken(false)
   } catch (err) {
     console.error(err)
-    return
+    return null
   }
-
-  const missed = []
-  await Promise.all(
-    need.map(async (child) => {
-      try {
-        const result = await posterForSlug(watchSlug(child), token)
-        if (result.unauthorized) missed.push(child)
-        else if (result.poster) {
-          child.data.preview = { images: [{ source: { url: result.poster } }] }
-        }
-      } catch (err) {
-        console.error(err)
-      }
-    })
-  )
-  if (!missed.length) return
-
-  try {
-    token = await redgifsToken(true)
-  } catch (err) {
-    console.error(err)
-    return
+  let result = await posterForSlug(slug, token)
+  if (result.unauthorized) {
+    try {
+      token = await redgifsToken(true)
+    } catch (err) {
+      console.error(err)
+      return null
+    }
+    result = await posterForSlug(slug, token)
   }
-  await Promise.all(
-    missed.map(async (child) => {
-      try {
-        const result = await posterForSlug(watchSlug(child), token)
-        if (result.poster) {
-          child.data.preview = { images: [{ source: { url: result.poster } }] }
-        }
-      } catch (err) {
-        console.error(err)
-      }
-    })
-  )
+  if (result.unauthorized) return null
+  return { url: result.poster || '', video: result.video || '' }
 }
 
 const NSFW_LIST_URL = 'https://theporndude.com/best-nsfw-reddit-sites'
@@ -441,18 +436,18 @@ async function listingFor(appUrl) {
         : children[children.length - 1].data.name
   }
   if (!children.length) return { data: { children: [] } }
-
-  await attachRedgifsPosters(children)
   return { data: { children } }
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'rm-req') return
-  const job = isNsfwDirectory(message.url)
-    ? nsfwDirectory()
-    : isRelatedRequest(message.url)
-      ? relatedFor(message.url)
-      : listingFor(message.url)
+  const job = isPosterRequest(message.url)
+    ? onePoster(message.url)
+    : isNsfwDirectory(message.url)
+      ? nsfwDirectory()
+      : isRelatedRequest(message.url)
+        ? relatedFor(message.url)
+        : listingFor(message.url)
   job
     .then((body) => sendResponse({ body }))
     .catch((err) => {

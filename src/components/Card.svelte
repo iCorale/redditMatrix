@@ -38,17 +38,49 @@
   const dispatch = createEventDispatcher()
 
   import { longpress } from '@utils/actions'
+  import { getRedgifsMedia, peekRedgifsMedia, redgifsSlug, sharpCover } from '@utils/api'
   import { spinup } from '@utils/transition'
 
   // State
   export let checked = writable<boolean>(false)
   export let title: string, url: string
+  export let embedUrl = ''
   export let isEmbed: boolean = false
   /** Attach the original only while this card is on screen or pinned. */
   export let active = false
   export let width = 0
   export let height = 0
-  let missing = !url
+  let fetched = ''
+  let posterState: 'idle' | 'pending' | 'none' | 'failed' | 'done' = 'idle'
+  let failedImage = false
+  let failedFor = ''
+  $: sharp = sharpCover(url)
+  $: cover = fetched || sharp
+  $: if (failedImage && (fetched || sharp) !== failedFor) failedImage = false
+  $: if (!active && posterState === 'failed') posterState = 'idle'
+  $: if (active && isEmbed && posterState === 'idle') {
+    const slug = redgifsSlug(embedUrl)
+    if (!slug) posterState = 'none'
+    else {
+      const known = peekRedgifsMedia(slug)
+      if (known) {
+        if (known.poster && !sharp) fetched = known.poster
+        posterState = known.video || known.poster || sharp ? 'done' : 'none'
+      } else {
+        posterState = 'pending'
+        const requested = slug
+        getRedgifsMedia(requested).then((result) => {
+          if (redgifsSlug(embedUrl) !== requested) return
+          if (result === false) posterState = 'failed'
+          else if (!result.video && !result.poster && !sharpCover(url)) posterState = 'none'
+          else {
+            if (result.poster && !sharpCover(url)) fetched = result.poster
+            posterState = 'done'
+          }
+        })
+      }
+    }
+  }
   let loaded = false
   let learnedW = 0
   let learnedH = 0
@@ -102,8 +134,10 @@
     }
   }
 
+  const record = { checked, url: '' }
+  $: record.url = cover
   onMount(() => {
-    $cards.push({ checked, url })
+    $cards.push(record)
   })
 </script>
 
@@ -125,7 +159,7 @@
   <div
     class="img"
     class:dim={$checked}
-    class:pending={!loaded || missing}
+    class:pending={!cover || !loaded || failedImage}
     style="aspect-ratio: {ratioCss}"
     use:longpress={{ callback: handleSelection }}
     on:click={() => {
@@ -137,15 +171,16 @@
     }}
   >
     <div class="backdrop" />
-    {#if active && url && !missing}
+    {#if active && cover && !failedImage}
       <img
         referrerpolicy="no-referrer"
         on:error|once={() => {
-          missing = true
+          failedFor = cover
+          failedImage = true
         }}
         on:load={learn}
         alt={title}
-        src={url}
+        src={cover}
       />
     {/if}
   </div>

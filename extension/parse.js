@@ -53,17 +53,33 @@ function redgifsSlug(html) {
   return ''
 }
 
+function usableCover(url) {
+  if (/[?&]blur=/i.test(url)) return false
+  if (/snoovatar|profileicon|award_images|\/styles\/|\/emoji\//i.test(url)) return false
+  return true
+}
+
+function firstClearUrl(text, source) {
+  const re = new RegExp(source, 'gi')
+  let match
+  while ((match = re.exec(text))) {
+    if (usableCover(match[0])) return match[0]
+  }
+  return ''
+}
+
 function coverUrl(html) {
   const text = decodeEntities(html)
   const patterns = [
-    /https:\/\/(?:external-preview|preview)\.redd\.it\/[^\s"'<>]+/i,
-    /https:\/\/media\.redgifs\.com\/[^\s"'<>]+-poster\.[a-z0-9]+/i,
-    /https:\/\/thumbs\d*\.redgifs\.com\/[^\s"'<>]+/i,
-    /https:\/\/i\.redd\.it\/[a-z0-9]+\.(?:jpe?g|png|gif|webp)/i
+    'https:\\/\\/media\\.redgifs\\.com\\/[^\\s"\'<>]+-poster\\.[a-z0-9]+',
+    'https:\\/\\/thumbs\\d*\\.redgifs\\.com\\/[^\\s"\'<>]+',
+    'https:\\/\\/i\\.redd\\.it\\/[a-z0-9]+\\.(?:jpe?g|png|gif|webp)',
+    'https:\\/\\/preview\\.redd\\.it\\/[^\\s"\'<>]+',
+    'https:\\/\\/external-preview\\.redd\\.it\\/[^\\s"\'<>]+'
   ]
-  for (const pattern of patterns) {
-    const match = text.match(pattern)
-    if (match) return match[0]
+  for (let i = 0; i < patterns.length; i++) {
+    const found = firstClearUrl(text, patterns[i])
+    if (found) return found
   }
   return ''
 }

@@ -13,7 +13,7 @@ export type Post = {
   url: string
   /** Full-quality original image URL used by the lightbox (image posts only) */
   fullUrl?: string
-  /** iframe embed URL for video/gif posts (redgifs). Lightbox shows an iframe. */
+  /** Redgifs embed id, kept so the lightbox can resolve the HD file. */
   embedUrl?: string
   /** Pixel size when known. The grid reserves a box before the original loads. */
   width?: number
@@ -68,6 +68,63 @@ function mimeToExt(mime: string): string {
     'image/webp': 'webp'
   }
   return map[mime] ?? 'jpg'
+}
+
+/** A frosted preview, watch page, or author avatar is not a usable cover. */
+export function sharpCover(value: unknown): string {
+  if (typeof value !== 'string' || !value) return ''
+  if (/[?&]blur=/i.test(value)) return ''
+  if (/snoovatar|profileicon|award_images|\/styles\/|\/emoji\//i.test(value)) return ''
+  if (/redgifs\.com\/(?:watch|ifr)\//i.test(value)) return ''
+  return value
+}
+
+export type RedgifsMedia = { poster: string; video: string }
+
+const redgifsCache = new Map<string, RedgifsMedia>()
+const redgifsInflight = new Map<string, Promise<RedgifsMedia | false>>()
+
+export function redgifsSlug(embedUrl: string): string {
+  return /\/ifr\/([a-z0-9-]+)/i.exec(embedUrl)?.[1] || ''
+}
+
+export function peekRedgifsMedia(slug: string): RedgifsMedia | undefined {
+  return redgifsCache.get(slug.toLowerCase())
+}
+
+function videoFile(value: unknown): string {
+  if (typeof value !== 'string' || !/^https:\/\/media\.redgifs\.com\//i.test(value)) return ''
+  if (!/\.mp4(\?|$)/i.test(value)) return ''
+  return value
+}
+
+/** Poster plus HD file. `false` when the lookup failed and can be retried. */
+export async function getRedgifsMedia(slug: string): Promise<RedgifsMedia | false> {
+  const key = slug.toLowerCase()
+  const cached = redgifsCache.get(key)
+  if (cached) return cached
+  let pending = redgifsInflight.get(key)
+  if (!pending) {
+    pending = fetchRedgifsMedia(slug).finally(() => redgifsInflight.delete(key))
+    redgifsInflight.set(key, pending)
+  }
+  return pending
+}
+
+async function fetchRedgifsMedia(slug: string): Promise<RedgifsMedia | false> {
+  try {
+    const res = await fetch(
+      `https://www.reddit.com/svc/rm/redgifs-poster.json?slug=${encodeURIComponent(slug)}`
+    )
+    if (!res.ok) return false
+    const json = await res.json()
+    if (typeof json?.url !== 'string') return false
+    const media = { poster: json.url, video: videoFile(json.video) }
+    redgifsCache.set(slug.toLowerCase(), media)
+    return media
+  } catch {
+    return false
+  }
 }
 
 /** Non-image hosts that should be skipped */
@@ -145,25 +202,16 @@ function extractPosts(raw: any, subreddit: string): Post[] {
   if (redgifsMatch) {
     const slug = redgifsMatch[1]
 
-    // Reddit puts oembed data in either `media` or `secure_media` (HTTPS links).
-    // thumbnail_url is e.g. https://media.redgifs.com/PascalCaseName-poster.jpg
-    // media.redgifs.com uses hotlink protection (Referer check). All <img> elements
-    // that may point there carry referrerpolicy="no-referrer" (see Card.svelte).
     const oembedThumb: string =
       item.media?.oembed?.thumbnail_url ??
       item.secure_media?.oembed?.thumbnail_url ??
       ''
-
-    // Thumbnail priority:
-    //  1. Reddit CDN preview (external-preview.redd.it) — no hotlink restriction
-    //  2. redgifs oembed poster (media.redgifs.com) — needs no-referrer on <img>
-    //  3. item.thumbnail field
     const fromPreview = item.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, '&')
     const fromThumbnail =
       typeof item.thumbnail === 'string' && item.thumbnail.startsWith('https://')
         ? item.thumbnail
         : ''
-    const thumbUrl = fromPreview || oembedThumb || fromThumbnail
+    const thumbUrl = [fromPreview, oembedThumb, fromThumbnail].find((value) => sharpCover(value)) || ''
 
     return [
       {
