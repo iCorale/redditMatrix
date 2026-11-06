@@ -1,41 +1,36 @@
 <script lang="ts">
-  import { onMount, tick, type ComponentType } from 'svelte'
+  import type { ComponentType } from 'svelte'
 
   // components
-  import '@material/mwc-top-app-bar'
   import HomeNav from './navbar/HomeNav.svelte'
   import InputNav from './navbar/InputNav.svelte'
+  import PageNav from './navbar/PageNav.svelte'
   import SelectionNav from './navbar/SelectionNav.svelte'
   import SubredditNav from './navbar/SubredditNav.svelte'
   import Results from './Results.svelte'
 
-  let dense: boolean = false
-
-  // lifecycle hooks
-  onMount(async () => {
-    dense = window.innerWidth > 768
-    window.addEventListener('resize', () => {
-      dense = window.innerWidth > 768
-    })
-  })
-
   // props/stores
   import { query, mode } from '@store/app'
-  import { isActive } from '@roxi/routify'
+  import { isActive, params } from '@roxi/routify'
 
   let activeComponent: ComponentType
+  let pageTitle: string
 
+  $: onSubreddit = !!$params.subreddit
   $: {
     if ($isActive('/index')) {
       activeComponent = HomeNav
-    } else if ($mode === 'idle') {
-      activeComponent = SubredditNav
-    } else if ($mode === 'search') {
+    } else if (onSubreddit && $mode === 'search') {
       activeComponent = InputNav
     } else if ($mode === 'selection') {
       activeComponent = SelectionNav
+    } else if (onSubreddit) {
+      activeComponent = SubredditNav
+    } else {
+      activeComponent = PageNav
     }
   }
+  $: pageTitle = $isActive('/settings') ? '外观' : ''
 
   async function handleSearch() {
     $query = ''
@@ -43,8 +38,12 @@
   }
 </script>
 
-<svelte:component this={activeComponent} {dense} on:search={handleSearch} />
-{#if $mode === 'search'}
+<svelte:component
+  this={activeComponent}
+  {...activeComponent === PageNav ? { title: pageTitle } : {}}
+  on:search={handleSearch}
+/>
+{#if onSubreddit && $mode === 'search'}
   <Results bind:input={$query} />
 {:else}
   <slot />

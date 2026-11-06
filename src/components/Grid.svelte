@@ -39,6 +39,15 @@
   let layoutAfterLeap = false
   let retryOnScroll = false
 
+  // A failed page is retried once per scroll gesture. Trackpad momentum keeps
+  // sending wheel events; without this each one would ask Reddit again.
+  const GESTURE_GAP = 400
+  const RETRY_GAP = 2000
+  let gesture = 0
+  let wheelAt = -Infinity
+  let retriedGesture = -1
+  let retriedAt = -Infinity
+
   let lightboxIndex: number | null = null
 
   const PRELOAD_THRESHOLD = 3
@@ -59,6 +68,15 @@
       _needMoreSent = true
       dispatch('needMore')
     }
+  }
+
+  /** Swiping past the last picture is the user asking again after a failed page. */
+  function retryFromLightbox() {
+    if (fetching || done) return
+    if (performance.now() - retriedAt < RETRY_GAP) return
+    retriedAt = performance.now()
+    _needMoreSent = true
+    dispatch('needMore')
   }
 
   $: loadingMore =
@@ -95,6 +113,8 @@
         retryOnScroll = false
       } else if (!done) {
         retryOnScroll = true
+        // The gesture still running when the failure lands does not count as asking again.
+        retriedGesture = gesture
       }
       if (preparingClick) preparingClick = false
       syncPhase()
@@ -116,8 +136,23 @@
     return run
   }
 
+  function onWheelGesture(event: WheelEvent) {
+    if (event.timeStamp - wheelAt > GESTURE_GAP) gesture++
+    wheelAt = event.timeStamp
+    releaseRetry()
+  }
+
+  function onTouchGesture() {
+    gesture++
+    releaseRetry()
+  }
+
   function releaseRetry() {
     if (!retryOnScroll || leaping) return
+    if (gesture === retriedGesture) return
+    if (performance.now() - retriedAt < RETRY_GAP) return
+    retriedGesture = gesture
+    retriedAt = performance.now()
     retryOnScroll = false
     askedForLen = -1
     scheduleMaintain()
@@ -392,14 +427,102 @@
     const rect = card?.getBoundingClientRect()
     const vh = window.innerHeight || 1
     const inView = !!rect && rect.bottom > 0 && rect.top < vh
-    if (img && inView && leapFocus == null) img.dataset.aos = 'fade-up'
+    const morphing = document.documentElement.classList.contains('rm-morph')
+    if (img && inView && leapFocus == null && !morphing) img.dataset.aos = 'fade-up'
     if (inView) AOS.refreshHard()
     masonry?.scheduleLayout(500)
     scheduleMaintain()
   }
 
-  function openLightbox(index: number) {
-    lightboxIndex = index
+  type ViewTransitionDoc = Document & {
+    startViewTransition?: (update: () => Promise<void>) => { finished: Promise<void> }
+  }
+
+  const PHOTO = 'rm-photo'
+
+  function canMorph(index: number) {
+    const doc = document as ViewTransitionDoc
+    if (typeof doc.startViewTransition !== 'function') return false
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false
+    return !!posts[index] && !posts[index].embedUrl
+  }
+
+  function cardImage(index: number) {
+    const img = document.querySelector(`#card-${index} img`) as HTMLImageElement | null
+    return img && img.complete && img.naturalWidth > 0 ? img : null
+  }
+
+  /** Resolves when the picture can be drawn, or after `ms` so a slow file never stalls the page. */
+  function drawable(img: HTMLImageElement | null, ms = 380) {
+    if (!img) return Promise.resolve()
+    if (img.complete && img.naturalWidth > 0) return img.decode().catch(() => {})
+    return Promise.race([
+      new Promise<void>((resolve) => {
+        img.addEventListener('load', () => resolve(), { once: true })
+        img.addEventListener('error', () => resolve(), { once: true })
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, ms))
+    ])
+  }
+
+  async function openLightbox(index: number) {
+    const from = canMorph(index) ? cardImage(index) : null
+    if (!from) {
+      lightboxIndex = index
+      return
+    }
+    const root = document.documentElement
+    from.style.setProperty('view-transition-name', PHOTO)
+    root.classList.add('rm-morph')
+    let to: HTMLImageElement | null = null
+    const vt = (document as ViewTransitionDoc).startViewTransition!(async () => {
+      from.style.removeProperty('view-transition-name')
+      lightboxIndex = index
+      await tick()
+      to = document.querySelector('img[data-photo]')
+      await drawable(to)
+      await tick()
+      to?.style.setProperty('view-transition-name', PHOTO)
+    })
+    await vt.finished.catch(() => {})
+    ;(to as HTMLImageElement | null)?.style.removeProperty('view-transition-name')
+    root.classList.remove('rm-morph')
+  }
+
+  /**
+   * Morph the open picture back onto its card, bringing the card on screen first.
+   * `false` when that cannot be done: the card is not laid out yet, or the picture is not drawn.
+   */
+  async function morphBack(idx: number) {
+    if (!canMorph(idx) || idx >= shown) return false
+    const card = document.getElementById(`card-${idx}`)
+    if (!card || card.slot === '') return false
+    const from = document.querySelector('img[data-photo]') as HTMLImageElement | null
+    if (!from || !from.complete || !from.naturalWidth) return false
+    const root = document.documentElement
+    from.style.setProperty('view-transition-name', PHOTO)
+    root.classList.add('rm-morph')
+    let to: HTMLImageElement | null = null
+    // No animation frames run inside the update, so nothing here may wait for one.
+    const vt = (document as ViewTransitionDoc).startViewTransition!(async () => {
+      lightboxIndex = null
+      await tick()
+      const rect = card.getBoundingClientRect()
+      const vh = window.innerHeight || 1
+      if (rect.top < 0 || rect.bottom > vh) {
+        window.scrollTo({ top: window.scrollY + rect.top + rect.height / 2 - vh / 2, behavior: 'instant' })
+      }
+      refreshActive()
+      await tick()
+      to = document.querySelector(`#card-${idx} img`)
+      await drawable(to)
+      await tick()
+      to?.style.setProperty('view-transition-name', PHOTO)
+    })
+    await vt.finished.catch(() => {})
+    ;(to as HTMLImageElement | null)?.style.removeProperty('view-transition-name')
+    root.classList.remove('rm-morph')
+    return true
   }
 
   function easeInOutCubic(t: number) {
@@ -467,6 +590,7 @@
       `height:${rect.height}px`,
       'pointer-events:none',
       'z-index:9999',
+      'border-radius:var(--radius-s)',
       'animation:cardRingFlash 0.9s ease-out forwards',
     ].join(';')
     document.body.appendChild(ring)
@@ -474,9 +598,13 @@
     setTimeout(() => ring.remove(), 1200)
   }
 
-  async function closeLightbox(e: CustomEvent<{ gesture?: 'wheel' }>) {
+  async function closeLightbox(e: CustomEvent<{ gesture?: 'wheel' | 'drag' }>) {
     if (e.detail?.gesture === 'wheel') holdWheelUntilQuiet()
     const idx = lightboxIndex
+    if (idx != null && e.detail?.gesture !== 'drag' && (await morphBack(idx))) {
+      scheduleMaintain()
+      return
+    }
     lightboxIndex = null
     if (idx != null && idx >= shown && idx < posts.length) {
       shown = idx + 1
@@ -522,11 +650,11 @@
 <svelte:window
   on:scroll={scheduleMaintain}
   on:resize={scheduleMaintain}
-  on:wheel={releaseRetry}
-  on:touchstart={releaseRetry}
+  on:wheel={onWheelGesture}
+  on:touchstart={onTouchGesture}
 />
 
-<masonry-layout bind:this={masonry} maxcolwidth="720" gap="0">
+<masonry-layout bind:this={masonry} maxcolwidth="720" gap="3">
   {#each posts.slice(0, shown) as post, i (post.id)}
     <div id="card-{i}">
       <Card
@@ -549,15 +677,17 @@
     {posts}
     bind:currentIndex={lightboxIndex}
     {loadingMore}
+    {done}
     on:close={closeLightbox}
+    on:edge={retryFromLightbox}
   />
 {/if}
 
 <style>
   @keyframes -global-cardRingFlash {
-    0%   { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0);    }
-    15%  { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85); }
-    70%  { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45); }
-    100% { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0);    }
+    0%   { box-shadow: inset 0 0 0 0 transparent; }
+    15%  { box-shadow: inset 0 0 0 3px var(--accent-color); }
+    70%  { box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--accent-color) 50%, transparent); }
+    100% { box-shadow: inset 0 0 0 3px transparent; }
   }
 </style>

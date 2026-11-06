@@ -19,7 +19,8 @@ function feedUrlFromAppUrl(appUrl) {
     kind,
     after: url.searchParams.get('after') || '',
     query: url.searchParams.get('q') || '',
-    sort: url.searchParams.get('sort') || ''
+    sort: url.searchParams.get('sort') || '',
+    range: url.searchParams.get('t') || ''
   }
   if (kind === 'search' && !target.query) return null
   return target
@@ -87,11 +88,17 @@ async function searchCursorFor(target, after) {
   return stored[key]
 }
 
+const TOP_RANGES = new Set(['hour', 'day', 'week', 'month', 'year', 'all'])
+
+function topRange(range) {
+  return TOP_RANGES.has(range) ? range : 'day'
+}
+
 function feedUrlFor(target, after) {
   const feed = new URL(`https://www.reddit.com/svc/shreddit/community-more-posts/${target.kind}/`)
   feed.searchParams.set('name', target.subreddit)
   feed.searchParams.set('feedLength', String(PAGE_TARGET))
-  if (target.kind === 'top') feed.searchParams.set('t', 'day')
+  if (target.kind === 'top') feed.searchParams.set('t', topRange(target.range))
   if (after) feed.searchParams.set('after', btoa(after))
   return feed.toString()
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import './global.scss'
   import 'normalize.css'
+  import './global.scss'
+  import '@store/user'
   import { Router } from '@roxi/routify'
   import { routes } from '../.routify/routes'
   let base_url = import.meta.env.BASE_URL

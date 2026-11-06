@@ -6,6 +6,8 @@
 
 <script lang="ts">
   import { searches } from '@store/user'
+  import { mode } from '@store/app'
+  import { goto, params } from '@roxi/routify'
 
   // Components
   import CList from './CancellableList.svelte'
@@ -30,16 +32,38 @@
   }
 
   // Methods
+  function pick(item: string) {
+    input = item
+    $goto(`/r/${$params.subreddit}?q=${encodeURIComponent(item)}`)
+    $mode = 'idle'
+  }
+
   function removeItem(item: string) {
     $searches = $searches.filter((i) => item !== i)
   }
 </script>
 
 <CList
-  on:click={({ detail: item }) => (input = item)}
+  on:click={({ detail: item }) => pick(item)}
   bind:items
   let:item
   {removeItem}
 >
-  <span>{item}</span>
+  <span class="item">{item}</span>
 </CList>
+{#if !items.length}
+  <p class="empty">{input.trim() ? '回车搜索' : '还没有搜索记录'}</p>
+{/if}
+
+<style>
+  .item {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .empty {
+    margin: 2rem 1rem;
+    text-align: center;
+    color: var(--faint-color);
+  }
+</style>

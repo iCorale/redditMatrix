@@ -1,58 +1,81 @@
-<script context="module" lang="ts">
-  let keptExpanded = false
-</script>
-
 <script lang="ts">
-  import { goto } from '@roxi/routify'
-  import { rememberSubreddit, subreddits } from '@store/user'
+  import { createEventDispatcher } from 'svelte'
+  import { flip } from 'svelte/animate'
+  import { scale } from 'svelte/transition'
 
-  const preview = 12
-  let expanded = keptExpanded
-  $: {
-    keptExpanded = expanded
-  }
+  import Close from '~icons/mdi/close'
+  import ChevronLeft from '~icons/mdi/chevron-left'
+  import ChevronRight from '~icons/mdi/chevron-right'
 
-  $: shown = expanded ? $subreddits : $subreddits.slice(0, preview)
-  $: hidden = Math.max(0, $subreddits.length - preview)
+  import { covers, forgetSubreddit, restoreSubreddit, subreddits } from '@store/user'
+  import { showToast } from '@store/toast'
+  import { hueFor } from '@utils/subreddit'
 
-  function open(name: string) {
-    rememberSubreddit(name)
-    $goto(`/r/${name}`)
-  }
+  /** Lower-case text to narrow the list. */
+  export let filter = ''
+
+  const dispatch = createEventDispatcher<{ open: string }>()
+
+  let editing = false
+  let rail: HTMLDivElement
+  let broken = new Set<string>()
+
+  $: shown = filter ? $subreddits.filter((name) => name.includes(filter)) : $subreddits
+  $: if (!$subreddits.length) editing = false
 
   function remove(name: string) {
-    $subreddits = $subreddits.filter((item) => item !== name)
+    const index = $subreddits.indexOf(name)
+    forgetSubreddit(name)
+    showToast(`已移除 r/${name}`, { label: '撤销', run: () => restoreSubreddit(name, index) }, 4000)
+  }
+
+  function page(dir: -1 | 1) {
+    rail?.scrollBy({ left: dir * rail.clientWidth * 0.8, behavior: 'smooth' })
+  }
+
+  function markBroken(name: string) {
+    broken.add(name)
+    broken = broken
   }
 </script>
 
-<div class="heading">
-  <h2>History</h2>
-  <span class="count">{$subreddits.length}</span>
-</div>
 {#if shown.length}
-  <div class="chips">
+  <div class="heading">
+    <h2>最近</h2>
+    <span class="count">{shown.length}</span>
+    <span class="tools">
+      <button type="button" class="arrow" aria-label="向左" on:click={() => page(-1)}><ChevronLeft /></button>
+      <button type="button" class="arrow" aria-label="向右" on:click={() => page(1)}><ChevronRight /></button>
+      <button type="button" class="edit" class:on={editing} on:click={() => (editing = !editing)}
+        >{editing ? '完成' : '编辑'}</button
+      >
+    </span>
+  </div>
+  <div class="rail" bind:this={rail}>
     {#each shown as name (name)}
-      <span class="chip">
-        <button type="button" on:click={() => open(name)}>
-          <span class="prefix">r/</span>{name}
-        </button>
+      {@const cover = $covers[name]}
+      <div class="tile" class:editing animate:flip={{ duration: 220 }} out:scale|local={{ duration: 160, start: 0.85 }}>
         <button
           type="button"
-          class="remove"
-          aria-label="Remove"
-          on:click={() => remove(name)}>×</button
+          class="cover"
+          data-open={editing ? undefined : ''}
+          style="--hue: {hueFor(name)}"
+          on:click={() => !editing && dispatch('open', name)}
         >
-      </span>
+          {#if cover && !broken.has(name)}
+            <img src={cover} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" on:error={() => markBroken(name)} />
+          {:else}
+            <span class="initial" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
+          {/if}
+          <span class="label"><span class="prefix">r/</span>{name}</span>
+        </button>
+        {#if editing}
+          <button type="button" class="remove" aria-label={`移除 r/${name}`} transition:scale={{ duration: 150 }} on:click={() => remove(name)}>
+            <Close />
+          </button>
+        {/if}
+      </div>
     {/each}
-    {#if !expanded && hidden > 0}
-      <button type="button" class="more" on:click={() => (expanded = true)}
-        >+{hidden}</button
-      >
-    {:else if expanded && hidden > 0}
-      <button type="button" class="more" on:click={() => (expanded = false)}
-        >Less</button
-      >
-    {/if}
   </div>
 {/if}
 
@@ -60,61 +83,179 @@
   .heading {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.55rem;
     margin: 0 1rem;
   }
   h2 {
     margin: 0;
-    font-size: 1.15rem;
+    font-size: 1.2rem;
+    font-weight: 750;
+    letter-spacing: -0.01em;
   }
   .count {
-    opacity: 0.5;
+    color: var(--faint-color);
     font-size: 0.9rem;
+    font-weight: 600;
   }
-  .chips {
+  .tools {
+    margin-left: auto;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    padding: 0 1rem;
-  }
-  .chip {
-    display: inline-flex;
     align-items: center;
-    border: 1px solid rgba(128, 128, 128, 0.55);
-    border-radius: 999px;
+    gap: 0.25rem;
+  }
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  .arrow {
+    display: none;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 0;
+    border-radius: 50%;
+    background: var(--surface-2);
+    font-size: 1.2rem;
     &:hover {
-      border-color: var(--accent-color);
+      background: var(--surface-3);
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .arrow {
+      display: grid;
+    }
+  }
+  .edit {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    background: transparent;
+    color: var(--muted-color);
+    font-size: 0.88rem;
+    font-weight: 600;
+    &:hover {
+      color: var(--foreground-color);
+    }
+    &.on {
+      background: var(--accent-soft);
       color: var(--accent-color);
     }
   }
-  button {
-    background: transparent;
-    color: inherit;
-    border: 0;
-    font: inherit;
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .chip > button:not(.remove) {
-    padding: 0.3rem 0.15rem 0.3rem 0.7rem;
-  }
-  .chip > .remove {
-    padding: 0.3rem 0.65rem 0.3rem 0.25rem;
-    opacity: 0.55;
-    font-size: 0.95rem;
-    line-height: 1;
-  }
-  .more {
-    border: 1px solid var(--accent-color);
-    border-radius: 999px;
-    padding: 0.3rem 0.7rem;
-    color: var(--accent-color);
-    &:hover {
-      background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+
+  .rail {
+    display: flex;
+    gap: 0.65rem;
+    overflow-x: auto;
+    padding: 0.7rem 1rem 0.6rem;
+    scroll-snap-type: x proximity;
+    scroll-padding: 0 1rem;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
     }
   }
+  .tile {
+    position: relative;
+    flex: none;
+    width: 8.25rem;
+    scroll-snap-align: start;
+  }
+  .cover {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    background: linear-gradient(
+      150deg,
+      hsl(var(--hue) 72% 52%),
+      hsl(calc(var(--hue) + 48) 70% 30%)
+    );
+    box-shadow: 0 10px 24px -14px rgb(var(--shadow-color) / 0.7);
+    transition: transform 0.25s var(--ease-spring);
+    &:active {
+      transform: scale(0.96);
+    }
+    img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.5s var(--ease-out);
+    }
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgb(0 0 0 / 0.75), transparent 55%);
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .cover:hover img {
+      transform: scale(1.06);
+    }
+  }
+  .tile.editing .cover {
+    animation: wobble 0.5s ease-in-out infinite alternate;
+  }
+  .tile.editing:nth-child(2n) .cover {
+    animation-delay: -0.25s;
+  }
+  @keyframes wobble {
+    from {
+      transform: rotate(-1.2deg);
+    }
+    to {
+      transform: rotate(1.2deg);
+    }
+  }
+  .initial {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding-bottom: 1.5rem;
+    color: rgb(255 255 255 / 0.9);
+    font-size: 3rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+  }
+  .label {
+    position: absolute;
+    left: 0.6rem;
+    right: 0.6rem;
+    bottom: 0.55rem;
+    z-index: 1;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 650;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .prefix {
-    opacity: 0.5;
-    font-weight: bold;
+    opacity: 0.6;
+  }
+  .remove {
+    position: absolute;
+    top: -0.4rem;
+    right: -0.4rem;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 2px solid var(--background-color);
+    border-radius: 50%;
+    background: var(--foreground-color);
+    color: var(--background-color);
+    font-size: 1rem;
   }
 </style>

@@ -151,10 +151,59 @@ function mimeFor(ext) {
   return 'image/jpeg'
 }
 
-function parsePosts(html) {
-  if (!html || html.includes('Prove your humanity') || !html.includes('<shreddit-post')) {
-    return null
+function epochSeconds(stamp) {
+  const iso = String(stamp || '')
+    .replace(/\.(\d{3})\d*/, '.$1')
+    .replace(/([+-]\d\d)(\d\d)$/, '$1:$2')
+  const ms = Date.parse(iso)
+  return ms > 0 ? ms / 1000 : 0
+}
+
+function countOf(value) {
+  if (value === '' || value == null) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function withMeta(data, meta) {
+  if (meta.author) data.author = meta.author
+  if (meta.score != null) data.score = meta.score
+  if (meta.comments != null) data.num_comments = meta.comments
+  if (meta.created) data.created_utc = meta.created
+  if (meta.permalink) data.permalink = meta.permalink
+  return data
+}
+
+function feedMeta(tag) {
+  return {
+    author: attr(tag, 'author'),
+    score: countOf(attr(tag, 'score')),
+    comments: countOf(attr(tag, 'comment-count')),
+    created: epochSeconds(attr(tag, 'created-timestamp')),
+    permalink: attr(tag, 'permalink')
   }
+}
+
+function searchMeta(slice) {
+  const author = slice.match(/"profile"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"/)
+  const counts = slice.match(
+    /search-counter-row[\s\S]*?<faceplate-number[^>]*\bnumber="(\d+)"[\s\S]*?<faceplate-number[^>]*\bnumber="(\d+)"/
+  )
+  const stamp = slice.match(/<faceplate-timeago[^>]*\bts="([^"]+)"/)
+  const link = slice.match(/href="(\/r\/[^"/]+\/comments\/[^"]+)"/)
+  return {
+    author: author ? author[1] : '',
+    score: counts ? countOf(counts[1]) : null,
+    comments: counts ? countOf(counts[2]) : null,
+    created: stamp ? epochSeconds(stamp[1]) : 0,
+    permalink: link ? link[1] : ''
+  }
+}
+
+function parsePosts(html) {
+  if (!html || /Prove your humanity|g-recaptcha|blocked by network security/i.test(html)) return null
+  // Past the last post Reddit still answers 200 with a bare partial (loaders, no posts): the list has ended.
+  if (!html.includes('<shreddit-post')) return /<faceplate-|<ac-track|<ac-publish/i.test(html) ? [] : null
 
   const children = []
   const seen = new Set()
@@ -176,6 +225,7 @@ function parsePosts(html) {
     const images = type === 'gallery' ? galleryImages(tag + body) : imageFiles(tag + body)
     const nsfw = /\bnsfw\b/i.test(tag)
     const slug = redgifsSlug(tag + body)
+    const meta = feedMeta(tag)
 
     if (type === 'gallery' && images.length) {
       seen.add(name)
@@ -191,7 +241,7 @@ function parsePosts(html) {
         }
       }
       children.push({
-        data: {
+        data: withMeta({
           name,
           title,
           url: images[0].url,
@@ -200,7 +250,7 @@ function parsePosts(html) {
           is_gallery: true,
           gallery_data: { items: images.map((image) => ({ media_id: image.id })) },
           media_metadata
-        }
+        }, meta)
       })
       continue
     }
@@ -208,13 +258,13 @@ function parsePosts(html) {
     if (slug) {
       seen.add(name)
       const poster = coverUrl(tag + body)
-      const data = {
+      const data = withMeta({
         name,
         title,
         url: `https://www.redgifs.com/watch/${slug}`,
         is_self: false,
         over_18: nsfw
-      }
+      }, meta)
       if (poster) data.preview = { images: [{ source: { url: poster } }] }
       const box = boxOfId(tag + body, slug)
       if (box) {
@@ -228,13 +278,13 @@ function parsePosts(html) {
     const direct = images[0]?.url || (/^https?:\/\/i\.redd\.it\//i.test(href) ? href : '')
     if (!direct) continue
     seen.add(name)
-    const single = {
+    const single = withMeta({
       name,
       title,
       url: direct,
       is_self: false,
       over_18: nsfw
-    }
+    }, meta)
     const box = boxOfId(tag + body, images[0]?.id || '')
     if (box) {
       single.width = box.x
@@ -290,16 +340,17 @@ function parseSearchPosts(html) {
     const nsfw = /"nsfw"\s*:\s*true/.test(slice.slice(0, 2500))
     const slug = redgifsSlug(slice)
     const images = collectImages(slice)
+    const meta = searchMeta(slice)
     if (slug) {
       seen.add(name)
       const poster = coverUrl(slice) || images[0]?.url || ''
-      const data = {
+      const data = withMeta({
         name,
         title,
         url: `https://www.redgifs.com/watch/${slug}`,
         is_self: false,
         over_18: nsfw
-      }
+      }, meta)
       if (poster) data.preview = { images: [{ source: { url: poster } }] }
       children.push({ data })
       continue
@@ -319,7 +370,7 @@ function parseSearchPosts(html) {
         }
       }
       children.push({
-        data: {
+        data: withMeta({
           name,
           title,
           url: direct,
@@ -328,18 +379,18 @@ function parseSearchPosts(html) {
           is_gallery: true,
           gallery_data: { items: images.map((image) => ({ media_id: image.id })) },
           media_metadata
-        }
+        }, meta)
       })
       continue
     }
     children.push({
-      data: {
+      data: withMeta({
         name,
         title,
         url: direct,
         is_self: false,
         over_18: nsfw
-      }
+      }, meta)
     })
   }
   return children

@@ -18,6 +18,13 @@ export type Post = {
   /** Pixel size when known. The grid reserves a box before the original loads. */
   width?: number
   height?: number
+  author?: string
+  score?: number
+  comments?: number
+  /** Milliseconds since the epoch. */
+  createdAt?: number
+  /** Path on reddit.com, e.g. "/r/pics/comments/abc123/title/". */
+  permalink?: string
 }
 
 /**
@@ -56,6 +63,21 @@ function pixelSizeMeta(meta: any): { width?: number; height?: number } {
   const height = Number(meta?.s?.y)
   if (!(width > 0 && height > 0)) return {}
   return { width, height }
+}
+
+function postMeta(item: any): Partial<Post> {
+  const meta: Partial<Post> = {}
+  const author = item?.author
+  if (typeof author === 'string' && author && author !== '[deleted]') meta.author = author
+  const score = Number(item?.score)
+  if (item?.score != null && Number.isFinite(score)) meta.score = score
+  const comments = Number(item?.num_comments)
+  if (item?.num_comments != null && Number.isFinite(comments)) meta.comments = comments
+  const created = Number(item?.created_utc)
+  if (created > 0) meta.createdAt = created * 1000
+  const permalink = item?.permalink
+  if (typeof permalink === 'string' && permalink.startsWith('/r/')) meta.permalink = permalink
+  return meta
 }
 
 /** Map Reddit MIME type to file extension */
@@ -141,6 +163,7 @@ const SKIP_URL_PREFIXES = [
  */
 function extractPosts(raw: any, subreddit: string): Post[] {
   const item = raw.data
+  const meta = postMeta(item)
 
   // Skip text-only posts
   if (item.is_self) return []
@@ -160,20 +183,20 @@ function extractPosts(raw: any, subreddit: string): Post[] {
     for (const { media_id, is_deleted } of item.gallery_data.items) {
       if (is_deleted) continue
 
-      const meta = item.media_metadata[media_id]
-      if (!meta || meta.status !== 'valid' || meta.e !== 'Image') continue
+      const media = item.media_metadata[media_id]
+      if (!media || media.status !== 'valid' || media.e !== 'Image') continue
 
       // Grid thumbnail: use the largest CDN preview (≤ 1080px) for fast loading
-      const previews: Array<{ x: number; u: string }> = meta.p ?? []
+      const previews: Array<{ x: number; u: string }> = media.p ?? []
       const bestPreview = previews.at(-1)
       const thumbnailUrl = bestPreview
         ? bestPreview.u.replace(/&amp;/g, '&')
-        : meta.s?.u?.replace(/&amp;/g, '&')
+        : media.s?.u?.replace(/&amp;/g, '&')
       if (!thumbnailUrl) continue
 
       // Lightbox original: i.redd.it direct URL, no CDN compression
-      const ext = mimeToExt(meta.m)
-      const direct = meta.s?.u?.replace(/&amp;/g, '&')
+      const ext = mimeToExt(media.m)
+      const direct = media.s?.u?.replace(/&amp;/g, '&')
       const fullUrl = direct?.includes('://i.redd.it/')
         ? direct
         : `https://i.redd.it/${media_id}.${ext}`
@@ -184,7 +207,8 @@ function extractPosts(raw: any, subreddit: string): Post[] {
         title: item.title,
         url: thumbnailUrl,
         fullUrl,
-        ...pixelSizeMeta(meta)
+        ...pixelSizeMeta(media),
+        ...meta
       })
     }
 
@@ -220,7 +244,8 @@ function extractPosts(raw: any, subreddit: string): Post[] {
         title: item.title,
         url: thumbUrl,
         embedUrl: `https://www.redgifs.com/ifr/${slug}`,
-        ...pixelSize(item)
+        ...pixelSize(item),
+        ...meta
       }
     ]
   }
@@ -229,14 +254,17 @@ function extractPosts(raw: any, subreddit: string): Post[] {
   // Skip gallery index pages that slipped through
   if (item.url.startsWith('https://www.reddit.com/gallery')) return []
 
-  return [{ id: item.name, postName: item.name, title: item.title, url: item.url, ...pixelSize(item) }]
+  return [
+    { id: item.name, postName: item.name, title: item.title, url: item.url, ...pixelSize(item), ...meta }
+  ]
 }
 
 export const getPosts = async (
   subreddit: string,
   query: string,
   after: string,
-  sort: SortType = 'hot'
+  sort: SortType = 'hot',
+  range = 'week'
 ) => {
   const params: Record<string, string> = {
     restrict_sr: '1',
@@ -246,6 +274,8 @@ export const getPosts = async (
   if (query) {
     params.q = query
     params.sort = sort
+  } else if (sort === 'top') {
+    params.t = range
   }
   if (after) {
     params.after = after

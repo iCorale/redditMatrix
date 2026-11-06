@@ -1,29 +1,40 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { goto } from '@roxi/routify'
 
-  // icons
-  import Menu from '~icons/mdi/menu'
+  import Palette from '~icons/mdi/palette-outline'
 
-  // components
-  import '@material/mwc-icon-button'
-
-  // props/stores
+  import AppBar from './AppBar.svelte'
   import { mode } from '@store/app'
-  export let dense: boolean
 
-  // lifecycle hooks
   onMount(() => {
     $mode = 'idle'
   })
 </script>
 
-<mwc-top-app-bar {dense}>
-  <!-- Menu Icon -->
-  <mwc-icon-button aria-label="navigation drawer" slot="navigationIcon">
-    <Menu />
-  </mwc-icon-button>
-  <!-- Title -->
-  <div slot="title">RMatrix</div>
-  <!-- Main Content -->
-  <slot />
-</mwc-top-app-bar>
+<AppBar>
+  <span slot="title" class="brand">RMatrix</span>
+  <button
+    slot="actions"
+    type="button"
+    class="bar-btn"
+    aria-label="外观设置"
+    title="外观设置"
+    on:click={() => $goto('/settings')}
+  >
+    <Palette />
+  </button>
+</AppBar>
+
+<style>
+  .brand {
+    padding-left: 0.6rem;
+    font-size: 1.3rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+</style>

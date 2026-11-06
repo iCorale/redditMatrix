@@ -170,7 +170,7 @@
   .dock {
     @extend %glass;
     position: fixed;
-    bottom: $edge;
+    bottom: calc(#{$edge} + env(safe-area-inset-bottom));
     right: 1.25rem;
     z-index: 500;
     width: $size;
@@ -231,7 +231,7 @@
     position: fixed;
     left: 0.75rem;
     right: 0.75rem;
-    bottom: calc(#{$edge} + var(--segments) * #{$size} + 0.5rem);
+    bottom: calc(#{$edge} + env(safe-area-inset-bottom) + var(--segments) * #{$size} + 0.5rem);
     z-index: 500;
     display: flex;
     gap: 0.4rem;
@@ -247,15 +247,17 @@
       flex: none;
       background: transparent;
       color: var(--foreground-color);
-      border: 1px solid color-mix(in srgb, var(--foreground-color) 30%, transparent);
+      border: 0;
+      background: var(--surface-2);
       border-radius: 999px;
       font: inherit;
       font-size: 0.85rem;
+      font-weight: 600;
       padding: 0.25rem 0.65rem;
       cursor: pointer;
       white-space: nowrap;
       &:hover {
-        border-color: var(--accent-color);
+        background: var(--accent-soft);
         color: var(--accent-color);
       }
     }

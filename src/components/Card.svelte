@@ -12,17 +12,22 @@
     mode.set('idle')
   }
 
-  export function handleCopy() {
+  export async function handleCopy(): Promise<{ copied: boolean; count: number }> {
     const urls: string[] = []
     get(cards).forEach((card) => {
       if (get(card.checked)) {
         urls.push(card.url)
       }
     })
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(urls.join('\n'))
+    let copied = false
+    try {
+      await navigator.clipboard.writeText(urls.join('\n'))
+      copied = true
+    } catch {
+      copied = false
     }
     handleDiscard()
+    return { copied, count: urls.length }
   }
 
   export const selectedCards = derived(cards, (cards) =>
@@ -141,11 +146,11 @@
   })
 </script>
 
-<section>
+<section class:checked={$checked}>
   {#if $checked}
     <div class="check">
-      <div transition:spinup|local>
-        <Check style="font-size: 1.5rem; color: var(--foreground-color)" />
+      <div class="check-dot" transition:spinup|local>
+        <Check />
       </div>
     </div>
   {/if}
@@ -174,6 +179,7 @@
     {#if active && cover && !failedImage}
       <img
         referrerpolicy="no-referrer"
+        class:shown={loaded}
         on:error|once={() => {
           failedFor = cover
           failedImage = true
@@ -183,6 +189,9 @@
         src={cover}
       />
     {/if}
+    {#if title}
+      <div class="caption" aria-hidden="true"><span>{title}</span></div>
+    {/if}
   </div>
 </section>
 
@@ -190,14 +199,33 @@
   section {
     display: grid;
     justify-items: end;
+    border-radius: var(--radius-s);
+    overflow: hidden;
+    isolation: isolate;
+    cursor: pointer;
+    transition: box-shadow 0.2s;
     * {
       grid-area: 1 / -1;
     }
+    &.checked {
+      box-shadow: inset 0 0 0 3px var(--accent-color);
+    }
   }
   div.check {
-    padding-block-start: 1rem;
-    padding-inline-end: 1rem;
-    z-index: 3;
+    padding-block-start: 0.75rem;
+    padding-inline-end: 0.75rem;
+    z-index: 4;
+  }
+  div.check-dot {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    color: var(--on-accent);
+    font-size: 1.2rem;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.35);
   }
   div.play-badge {
     justify-self: start;
@@ -221,10 +249,23 @@
     }
   }
   div.img {
+    position: relative;
     display: grid;
     width: 100%;
-    &.pending {
-      background: color-mix(in srgb, var(--foreground-color) 12%, var(--background-color));
+    overflow: hidden;
+    background: var(--placeholder-color);
+    &.pending::after {
+      content: '';
+      grid-area: 1 / -1;
+      z-index: 1;
+      background: linear-gradient(
+        100deg,
+        transparent 20%,
+        color-mix(in srgb, var(--foreground-color) 6%, transparent) 50%,
+        transparent 80%
+      );
+      animation: rm-shimmer 1.6s ease-in-out infinite;
+      pointer-events: none;
     }
     &.dim {
       div.backdrop {
@@ -245,5 +286,50 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    opacity: 0;
+    transition:
+      opacity 0.45s var(--ease-out),
+      transform 0.6s var(--ease-out);
+    &.shown {
+      opacity: 1;
+    }
+  }
+  .caption {
+    grid-area: 1 / -1;
+    z-index: 3;
+    align-self: end;
+    display: flex;
+    align-items: flex-end;
+    min-height: 40%;
+    padding: 0.9rem 1rem 0.85rem;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0.25) 55%, transparent);
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    opacity: 0;
+    transform: translateY(6px);
+    transition:
+      opacity 0.25s,
+      transform 0.3s var(--ease-out);
+    pointer-events: none;
+    span {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    section:hover {
+      .caption {
+        opacity: 1;
+        transform: none;
+      }
+      img.shown {
+        transform: scale(1.025);
+      }
+    }
   }
 </style>

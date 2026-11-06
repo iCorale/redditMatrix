@@ -38,6 +38,8 @@ Surge 仓库只放要推送的模块和脚本，不要在那里加说明文件�
 
 改列表行为时，三处一起改：扩展、Surge 仓库里的 `Script/RedditMatrix.js`、本机配置目录里的那份副本。
 
+Surge 仓库改完直接提交并推送，不用先问。本机装的模块从 GitHub 拉脚本，不推送就测不到实际效果。推送后运行 `surge-cli external-resource update all`，再验证。
+
 Surge 脚本没有 `URL` 和 `btoa`。持久存储是 `$persistentStore.write(值, 键)`。键只能是字母、数字、`.`、`_`、`-`，最长 128。搜索游标写在这里，不能只放内存。
 
 只替换来自 `icorale.github.io`、`localhost`、`127.0.0.1` 的列表请求。本地验证时，请求要带这些来源之一的 `Origin`。改完本机模块后重新加载 Surge，必要时关掉再打开该模块。

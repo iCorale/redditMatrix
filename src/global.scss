@@ -1,70 +1,169 @@
-/* ─── CSS custom properties (light / dark theme) ─────────────────── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent-color: #f8bbd0;
-    --background-color: #000000;
-    --foreground-color: #ffffff;
-    --ripple-color: #999999;
-  }
-}
+@use 'sass:map';
+@use 'sass:list';
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --accent-color: #c2185b;
-    --background-color: #ffffff;
-    --foreground-color: #000000;
-    --ripple-color: #cccccc;
+/* ─── Palette ──────────────────────────────────────────────────────
+   Pictures are the only thing on screen with colour. The interface stays
+   neutral, and the accent is spent on the few places that mean "here". */
+
+// (accent, second gradient stop, text on accent)
+$accents: (
+  'rose': (dark: (#ff4d8d, #ff9a62, #ffffff), light: (#d6195a, #e85d1f, #ffffff)),
+  'violet': (dark: (#a78bfa, #f472b6, #ffffff), light: (#7c3aed, #db2777, #ffffff)),
+  'sky': (dark: (#38bdf8, #818cf8, #04121c), light: (#0369a1, #4f46e5, #ffffff)),
+  'lime': (dark: (#d4ff3a, #5eead4, #0b0f02), light: (#4d7c0f, #0f766e, #ffffff)),
+  'amber': (dark: (#fbbf24, #fb7185, #1a0f00), light: (#b45309, #be123c, #ffffff))
+);
+
+@mixin scheme($scheme) {
+  @if $scheme == dark {
+    color-scheme: dark;
+    --background-color: #000000;
+    --foreground-color: #f5f5f7;
+    --glass-tint: #121214;
+    --placeholder-color: #0e0e10;
+    --shadow-color: 0 0 0;
+  } @else {
+    color-scheme: light;
+    --background-color: #f4f4f6;
+    --foreground-color: #111114;
+    --glass-tint: #ffffff;
+    --placeholder-color: #e4e4e9;
+    --shadow-color: 40 40 60;
+  }
+  $default: map.get($accents, 'rose', $scheme);
+  --accent-color: #{list.nth($default, 1)};
+  --accent-2: #{list.nth($default, 2)};
+  --on-accent: #{list.nth($default, 3)};
+  @each $name, $pair in $accents {
+    $colors: map.get($pair, $scheme);
+    &[data-accent='#{$name}'] {
+      --accent-color: #{list.nth($colors, 1)};
+      --accent-2: #{list.nth($colors, 2)};
+      --on-accent: #{list.nth($colors, 3)};
+    }
   }
 }
 
 :root {
+  @include scheme(dark);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-scheme='dark']) {
+    @include scheme(light);
+  }
+}
+:root[data-scheme='light'] {
+  @include scheme(light);
+}
+
+:root {
+  /* Derived from the base colours, so a custom accent still lines up. */
+  --surface-1: color-mix(in srgb, var(--foreground-color) 5%, var(--background-color));
+  --surface-2: color-mix(in srgb, var(--foreground-color) 9%, var(--background-color));
+  --surface-3: color-mix(in srgb, var(--foreground-color) 15%, var(--background-color));
+  --muted-color: color-mix(in srgb, var(--foreground-color) 56%, transparent);
+  --faint-color: color-mix(in srgb, var(--foreground-color) 34%, transparent);
+  --line-color: color-mix(in srgb, var(--foreground-color) 11%, transparent);
+  --glass-color: color-mix(in srgb, var(--glass-tint) 70%, transparent);
+  --glass-line: color-mix(in srgb, var(--foreground-color) 14%, transparent);
+  --accent-gradient: linear-gradient(120deg, var(--accent-color), var(--accent-2));
+  --accent-soft: color-mix(in srgb, var(--accent-color) 16%, transparent);
+  --ripple-color: var(--faint-color);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB',
+    'Inter', 'Segoe UI', 'Microsoft YaHei', Roboto, sans-serif;
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 22px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --appbar-height: 3.5rem;
+
   /*------------------------------------------------------------------*/
   /*                          MDC Variables                           */
   /*------------------------------------------------------------------*/
   --mdc-theme-primary: var(--background-color);
   --mdc-theme-on-primary: var(--foreground-color);
   --mdc-theme-secondary: var(--accent-color);
-  --mdc-theme-on-secondary: var(--background-color);
+  --mdc-theme-on-secondary: var(--on-accent);
   --mdc-theme-text-primary-on-background: var(--foreground-color);
   --mdc-ripple-color: var(--ripple-color);
-}
-
-mwc-textfield {
-  /*------------------------------------------------------------------*/
-  /*                          Ripple Colors                           */
-  /*------------------------------------------------------------------*/
-  --mdc-theme-primary: var(--accent-color);
-  --mdc-theme-secondary: var(--accent-color);
-
-  --mdc-text-field-outlined-idle-border-color: var(--foreground-color);
-  --mdc-text-field-outlined-hover-border-color: var(--foreground-color);
-  --mdc-text-field-ink-color: var(--foreground-color);
-  --mdc-text-field-label-ink-color: var(--foreground-color);
-  --mdc-text-field-disabled-ink-color: var(--foreground-color);
-  --mdc-text-field-hover-line-color: var(--accent-color);
-  --mdc-text-field-idle-line-color: var(--foreground-color);
-  --mdc-text-field-fill-color: #{rgba(white, 5%)};
-}
-
-mwc-linear-progress {
-  --mdc-theme-primary: var(--accent-color);
-}
-
-mwc-icon-button {
-  color: var(--foreground-color);
+  --mdc-typography-font-family: var(--font-sans);
 }
 
 * {
   caret-color: var(--accent-color);
+  -webkit-tap-highlight-color: transparent;
+}
+::selection {
+  background: var(--accent-soft);
 }
 html,
 body {
   background-color: var(--background-color);
   color: var(--foreground-color);
-  font-family: sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   height: max(100%, 100vh);
   overscroll-behavior-y: contain;
 }
 #app {
   height: 100%;
+}
+button,
+input {
+  font-family: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+@keyframes -global-rm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes -global-rm-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Grid card ⇄ lightbox. The picture itself moves; the page cross-fades. */
+.rm-morph img[data-photo],
+.rm-morph [id^='card-'] img {
+  transition: none !important;
+  animation: none !important;
+}
+::view-transition-group(rm-photo) {
+  animation-duration: 0.42s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(rm-photo) {
+  animation: none;
+  opacity: 0;
+}
+::view-transition-new(rm-photo) {
+  animation: none;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.3s;
+}
+
+/* Shared accent spinner. */
+.rm-spinner {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: conic-gradient(from 90deg, transparent 0 15%, var(--accent-color), var(--accent-2));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  animation: rm-spin 0.8s linear infinite;
 }
