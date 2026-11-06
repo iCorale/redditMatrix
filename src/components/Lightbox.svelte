@@ -401,21 +401,44 @@
 
   function startPinch(event: TouchEvent) {
     if (!imgEl) return
-    clearTimeout(tapTimer)
     const { distance, mid } = touchPair(event)
     pinching = true
+    tapZoom = null
+    pinchD0 = distance || 1
+    beginScale(mid)
+  }
+
+  function beginScale(mid: { x: number; y: number }) {
+    if (!imgEl) return
+    clearTimeout(tapTimer)
     swipeBlocked = true
     tapBlocked = true
     dragX = 0
     dragY = 0
     dragAxis = null
-    pinchD0 = distance || 1
     pinchMid0 = mid
     pinchMid = mid
     pinchScale = 1
     pinchRect = imgEl.getBoundingClientRect()
     imgEl.style.transition = 'none'
     imgEl.style.transformOrigin = `${mid.x - pinchRect.left}px ${mid.y - pinchRect.top}px`
+  }
+
+  // ── One thumb: tap, then hold the second tap and slide down to zoom in ────
+  let tapZoom: { y: number; on: boolean } | null = null
+
+  function moveTapZoom(touch: Touch) {
+    if (!imgEl || !tapZoom) return
+    const dy = touch.clientY - tapZoom.y
+    if (!tapZoom.on) {
+      if (Math.hypot(touch.clientX - swipeX, dy) <= 10) return
+      tapZoom = { y: touch.clientY, on: true }
+      beginScale({ x: swipeX, y: swipeY })
+      return
+    }
+    const least = pinchRect ? Math.min(0.6, (0.6 * fitWidth()) / pinchRect.width) : 0.6
+    pinchScale = Math.min(10, Math.max(least, Math.exp(dy / 140)))
+    imgEl.style.transform = `scale(${pinchScale})`
   }
 
   function movePinch(event: TouchEvent) {
@@ -492,6 +515,12 @@
     const control = target instanceof Element && !!target.closest('button, a, .scrub')
     swipeBlocked = isZoomed || control
     tapBlocked = control || (target instanceof Element && !!target.closest('.player, .embed-frame'))
+    const secondTap =
+      !embedUrl && imgLoaded && !tapBlocked &&
+      event.timeStamp - lastTap.at < 320 &&
+      Math.hypot(touch.clientX - lastTap.x, touch.clientY - lastTap.y) < 40
+    tapZoom = secondTap ? { y: touch.clientY, on: false } : null
+    if (secondTap) clearTimeout(tapTimer)
   }
 
   function swipeMove(event: TouchEvent) {
@@ -499,6 +528,11 @@
       event.preventDefault()
       movePinch(event)
       return
+    }
+    if (tapZoom && event.touches.length === 1) {
+      event.preventDefault()
+      moveTapZoom(event.touches[0])
+      if (tapZoom.on) return
     }
     if (event.touches.length !== 1) return
     const touch = event.touches[0]
@@ -622,6 +656,13 @@
       if (event.touches.length < 2) endPinch()
       return
     }
+    if (tapZoom?.on) {
+      tapZoom = null
+      lastTap.at = 0
+      endPinch()
+      return
+    }
+    tapZoom = null
     if (event.changedTouches.length !== 1 || event.touches.length) return
     const touch = event.changedTouches[0]
     if (!touchMoved && !tapBlocked && event.timeStamp - swipeAt < 350) {
@@ -1595,7 +1636,6 @@
   @media (pointer: coarse) {
     .top-actions { right: 0.6rem; }
     .icon-btn.close-btn { right: auto; left: 0.6rem; }
-    .top-actions .zoom-btn { display: none; }
   }
 
   .overlay.idle,

@@ -439,6 +439,7 @@
   }
 
   const PHOTO = 'rm-photo'
+  const DECODE_PIXELS = 24_000_000
 
   function canMorph(index: number) {
     const doc = document as ViewTransitionDoc
@@ -455,7 +456,12 @@
   /** Resolves when the picture can be drawn, or after `ms` so a slow file never stalls the page. */
   function drawable(img: HTMLImageElement | null, ms = 380) {
     if (!img) return Promise.resolve()
-    if (img.complete && img.naturalWidth > 0) return img.decode().catch(() => {})
+    if (img.complete && img.naturalWidth > 0) {
+      // decode() builds a bitmap at the natural size; a 150 MP original is
+      // ~600 MB and the tab is killed and reloaded.
+      if (img.naturalWidth * img.naturalHeight > DECODE_PIXELS) return Promise.resolve()
+      return img.decode().catch(() => {})
+    }
     return Promise.race([
       new Promise<void>((resolve) => {
         img.addEventListener('load', () => resolve(), { once: true })
