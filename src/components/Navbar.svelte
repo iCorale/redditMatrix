@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onMount, tick, type ComponentType } from 'svelte'
 
   // components
   import '@material/mwc-top-app-bar'
@@ -23,7 +23,7 @@
   import { query, mode } from '@store/app'
   import { isActive } from '@roxi/routify'
 
-  let activeComponent
+  let activeComponent: ComponentType
 
   $: {
     if ($isActive('/index')) {

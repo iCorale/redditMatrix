@@ -74,7 +74,7 @@
           $mode = 'search'
           await tick()
           input = document.getElementById('searchbar')
-          input.focus()
+          input?.focus()
         }
         break
       default:

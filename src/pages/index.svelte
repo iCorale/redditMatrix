@@ -44,8 +44,10 @@
     ? visibleSubreddits
     : visibleSubreddits.slice(0, nsfwPreview)
   $: hiddenSubreddits = visibleSubreddits.length - shownSubreddits.length
-  $: keptFilter = filter
-  $: keptExpanded = nsfwExpanded
+  $: {
+    keptFilter = filter
+    keptExpanded = nsfwExpanded
+  }
 
   //lifecycle hooks
   onMount(() => {
@@ -132,6 +134,13 @@
   function handleSearch() {
     if (value.trim()) openSubreddit(value)
   }
+
+  function handleKeyUp(e: KeyboardEvent) {
+    value = (e.target as HTMLInputElement).value
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
+  }
 </script>
 
 <svelte:window on:scroll={rememberScroll} />
@@ -141,12 +150,7 @@
   <section id="search">
     <mwc-textfield
       bind:this={input}
-      on:keyup={(e) => {
-        value = e.target.value
-        if (e.key === 'Enter') {
-          handleSearch()
-        }
-      }}
+      on:keyup={handleKeyUp}
       label="Subreddit"
     />
     <mwc-fab label="search" on:click={handleSearch}>

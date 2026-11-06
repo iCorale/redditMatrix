@@ -1,8 +1,8 @@
 <script lang="ts" context="module">
   import { mode } from '@store/app'
   import { feedLeaping } from '@store/feed'
-  import { get, writable, derived } from 'svelte/store'
-  const cards = writable([])
+  import { get, writable, derived, type Writable } from 'svelte/store'
+  const cards = writable<{ checked: Writable<boolean>; url: string }[]>([])
 
   export function handleDiscard() {
     get(cards).forEach((card) => {
@@ -13,7 +13,7 @@
   }
 
   export function handleCopy() {
-    const urls = []
+    const urls: string[] = []
     get(cards).forEach((card) => {
       if (get(card.checked)) {
         urls.push(card.url)

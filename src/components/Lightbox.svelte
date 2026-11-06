@@ -600,7 +600,6 @@
           poster={posterUrl || undefined}
           loop
           preload="auto"
-          referrerpolicy="no-referrer"
           use:mountVideo
           on:loadedmetadata={fitVideoBox}
           on:loadeddata={playClip}

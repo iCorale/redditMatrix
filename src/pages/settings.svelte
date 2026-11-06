@@ -4,7 +4,7 @@
   // props/stores
   import { theme } from '@store/user'
 
-  function colorCallback(value, mode) {
+  function colorCallback(value: string, mode: 'foreground' | 'background' | 'accent') {
     switch (mode) {
       case 'foreground':
         $theme.foregroundColor = value
@@ -44,7 +44,7 @@
       slot="meta"
       type="color"
       value={$theme?.accentColor}
-      on:change={(e) => colorCallback(e.target.value, 'accent')}
+      on:change={(e) => colorCallback(e.currentTarget.value, 'accent')}
     />
   </mwc-list-item>
   <li divider padded role="separator" />
@@ -54,7 +54,7 @@
       slot="meta"
       type="color"
       value={$theme?.backgroundColor}
-      on:change={(e) => colorCallback(e.target.value, 'background')}
+      on:change={(e) => colorCallback(e.currentTarget.value, 'background')}
     />
   </mwc-list-item>
   <li divider padded role="separator" />
@@ -64,7 +64,7 @@
       slot="meta"
       type="color"
       value={$theme?.foregroundColor}
-      on:change={(e) => colorCallback(e.target.value, 'foreground')}
+      on:change={(e) => colorCallback(e.currentTarget.value, 'foreground')}
     />
   </mwc-list-item>
 </mwc-list>

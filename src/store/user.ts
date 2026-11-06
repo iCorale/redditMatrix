@@ -3,7 +3,7 @@ import { Storage } from '@capacitor/storage'
 
 const root = document.documentElement
 
-async function getInitialValue(key: string, set) {
+async function getInitialValue<T>(key: string, set: (value: T) => void) {
   const { value } = await Storage.get({ key })
   value && set(JSON.parse(value))
 }

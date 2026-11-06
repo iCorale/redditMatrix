@@ -8,7 +8,9 @@
 
   const preview = 12
   let expanded = keptExpanded
-  $: keptExpanded = expanded
+  $: {
+    keptExpanded = expanded
+  }
 
   $: shown = expanded ? $subreddits : $subreddits.slice(0, preview)
   $: hidden = Math.max(0, $subreddits.length - preview)

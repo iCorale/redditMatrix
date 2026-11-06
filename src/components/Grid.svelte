@@ -384,7 +384,7 @@
       const card = (e.detail?.target as HTMLElement | undefined)?.closest('[id^="card-"]')
       const index = card ? Number(card.id.slice(5)) : -1
       const post = posts[index]
-      if (post && !(post.width > 0 && post.height > 0)) layoutAfterLeap = true
+      if (post && !((post.width ?? 0) > 0 && (post.height ?? 0) > 0)) layoutAfterLeap = true
       return
     }
     const img = e.detail?.target as HTMLElement | undefined

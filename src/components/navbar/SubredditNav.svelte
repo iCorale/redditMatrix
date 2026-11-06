@@ -23,7 +23,7 @@
   import { mode, sort, refreshSignal } from '@store/app'
   import { relatedSubreddits } from '@store/feed'
   import { goto, params } from '@roxi/routify'
-  import { getRelated } from '@utils/api'
+  import { getRelated, type SortType } from '@utils/api'
 
   export let dense: boolean
 
@@ -63,7 +63,7 @@
   })
 
 
-  const sortOptions = [
+  const sortOptions: { value: SortType; label: string; icon: typeof StarOutline }[] = [
     { value: 'best', label: '最优', icon: StarOutline },
     { value: 'hot', label: '热门', icon: Fire },
     { value: 'new', label: '最新', icon: ClockOutline },
