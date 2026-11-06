@@ -40,6 +40,9 @@
   let wheelDy = 0
   let wheelReady = true
   let wheelTimer: ReturnType<typeof setTimeout> | undefined
+  let wheelPeak = 0
+  let wheelTrough = Infinity
+  let wheelFalling = false
   let paused = true
   let started = false
   let currentTime = 0
@@ -210,12 +213,19 @@
       wheelDy = 0
       wheelReady = true
     }, 280)
+    if (!wheelReady && isNewSwipe(Math.hypot(event.deltaX, event.deltaY))) {
+      wheelReady = true
+      wheelDx = 0
+      wheelDy = 0
+    }
     if (!wheelReady) return
 
-    // 自然滚动时先转回手指方向。触控板向右是下一张，向上滑才关闭。
-    const inverted = Boolean((event as WheelEvent & { webkitDirectionInvertedFromDevice?: boolean }).webkitDirectionInvertedFromDevice)
-    wheelDx += inverted ? -event.deltaX : event.deltaX
-    wheelDy += inverted ? -event.deltaY : event.deltaY
+    // 先转回手指方向：向右、向下为正。和手机一样，向左是下一张，向上滑才关闭。
+    // 只有 Safari 报告是否自然滚动；Chrome 报不出来，按 macOS 默认的自然滚动算。
+    const natural = (event as WheelEvent & { webkitDirectionInvertedFromDevice?: boolean }).webkitDirectionInvertedFromDevice ?? true
+    const sign = natural ? -1 : 1
+    wheelDx += sign * event.deltaX
+    wheelDy += sign * event.deltaY
     const absX = Math.abs(wheelDx)
     const absY = Math.abs(wheelDy)
     // 轻拨就能过。48 以下是手指搭上去的抖动，不算滑动。
@@ -225,17 +235,39 @@
     wheelDx = 0
     wheelDy = 0
     wheelReady = false
+    wheelPeak = 0
+    wheelTrough = Infinity
+    wheelFalling = false
     if (absX >= absY) {
       markGesture()
-      // 向右滑到下一张，和右侧箭头一致。
-      if (dx < 0) prev()
-      else next()
+      if (dx < 0) next()
+      else prev()
       return
     }
-    if (dy >= 48) {
+    if (dy <= -48) {
       markGesture()
-      close()
+      close('wheel')
     }
+  }
+
+  /**
+   * Trackpad momentum only decays. Once it has fallen below half its peak, a
+   * clear rise again means the finger started a new swipe.
+   */
+  function isNewSwipe(magnitude: number) {
+    if (!wheelFalling) {
+      if (magnitude >= wheelPeak) wheelPeak = magnitude
+      else if (magnitude < wheelPeak * 0.5) {
+        wheelFalling = true
+        wheelTrough = magnitude
+      }
+      return false
+    }
+    if (magnitude < wheelTrough) {
+      wheelTrough = magnitude
+      return false
+    }
+    return magnitude >= wheelTrough * 2 && magnitude >= wheelTrough + 6
   }
 
   function markGesture() {
@@ -277,6 +309,7 @@
 
   function playClip(event: Event) {
     const video = event.currentTarget as HTMLVideoElement
+    videoReady = true
     video.play().catch(() => {})
   }
 
@@ -317,13 +350,61 @@
   }
 
   let imgLoaded = false
+  let videoReady = false
   $: if (currentIndex !== undefined) {
     imgLoaded = false
+    videoReady = false
     isZoomed = false
     clearZoomBox()
   }
 
+  // Wait for the current item first so neighbours do not take its bandwidth.
+  $: ready = embedUrl ? playback === 'iframe' || videoReady : imgLoaded
+  $: if (ready && posts) preloadNeighbours()
+
+  // Download only. Neighbours are decoded when they are shown, so this costs
+  // their files in memory, not decoded bitmaps.
+  let preloaders: HTMLImageElement[] = []
+
+  function warm(src: string, keep: HTMLImageElement[]) {
+    if (!src) return
+    const known = preloaders.find((img) => img.src === src)
+    if (known) {
+      keep.push(known)
+      return
+    }
+    const img = new Image()
+    img.referrerPolicy = 'no-referrer'
+    img.src = src
+    keep.push(img)
+  }
+
+  function preloadNeighbours() {
+    const next: HTMLImageElement[] = []
+    for (const index of [currentIndex + 1, currentIndex - 1]) {
+      const post = posts[index]
+      if (!post) continue
+      if (!post.embedUrl) {
+        warm(post.fullUrl ?? post.url, next)
+        continue
+      }
+      // A clip needs its lookup before the player can start. The file itself is
+      // left to the player: Safari does not buffer video for detached elements.
+      const slug = redgifsSlug(post.embedUrl)
+      const known = slug ? peekRedgifsMedia(slug) : undefined
+      if (known) warm(known.poster, next)
+      else if (slug) {
+        getRedgifsMedia(slug).then((media) => {
+          if (media && media.poster) warm(media.poster, preloaders)
+        })
+      }
+    }
+    preloaders = next
+  }
+
   // ── Zoom (Reddit-style: natural resolution + scroll clamp) ────────────────
+  // iPhone and iPad tabs are killed far sooner than desktop ones.
+  const ZOOM_DEVICE_PIXELS = navigator.maxTouchPoints > 0 ? 32_000_000 : 64_000_000
   let isZoomed = false
   let scrollContainer: HTMLDivElement
   let imgEl: HTMLImageElement
@@ -340,8 +421,13 @@
     const nw = img.naturalWidth
     const nh = img.naturalHeight
     if (!(nw > 0 && nh > 0)) return
-    const longest = Math.max(nw, nh)
-    const scale = longest > 4096 ? 4096 / longest : 1
+    const dpr = window.devicePixelRatio || 1
+    // Safari decodes at the drawn size in device pixels. Past the budget the
+    // tab runs out of memory and WebKit reloads the page.
+    let scale = Math.max(1 / dpr, (2 * rect.width) / nw)
+    if (nw * nh > ZOOM_DEVICE_PIXELS) {
+      scale = Math.min(scale, Math.sqrt(ZOOM_DEVICE_PIXELS / (nw * nh)) / dpr)
+    }
     const dw = Math.max(1, Math.floor(nw * scale))
     const dh = Math.max(1, Math.floor(nh * scale))
     img.style.width = `${dw}px`
@@ -380,9 +466,9 @@
     isZoomed = false
     clearZoomBox()
   }
-  function close() {
+  function close(gesture?: 'wheel') {
     videoEl?.pause()
-    dispatch('close')
+    dispatch('close', { gesture })
   }
   function prev()    { if (currentIndex > 0) go(currentIndex - 1) }
   function next()    { if (currentIndex < posts.length - 1) go(currentIndex + 1) }
@@ -491,7 +577,7 @@
        class="icon-btn" title="在新标签页打开">
       <OpenInNew />
     </a>
-    <button class="icon-btn" on:click={close} title="关闭">
+    <button class="icon-btn" on:click={() => close()} title="关闭">
       <Close />
     </button>
   </div>

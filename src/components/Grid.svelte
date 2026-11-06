@@ -406,17 +406,54 @@
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
   }
 
+  const TAKEOVER_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown']
+
+  /** Stops as soon as the user scrolls, touches, or presses a key. */
   function smoothScrollTo(targetY: number, duration = 450, onComplete?: () => void) {
     const startY = window.scrollY
     const diff = targetY - startY
     const t0 = performance.now()
+    let stopped = false
+    const detach = () => TAKEOVER_EVENTS.forEach((type) => window.removeEventListener(type, stop))
+    const stop = () => {
+      stopped = true
+      detach()
+    }
+    TAKEOVER_EVENTS.forEach((type) => window.addEventListener(type, stop, { passive: true }))
     const step = (now: number) => {
+      if (stopped) return
       const progress = Math.min((now - t0) / duration, 1)
       window.scrollTo(0, startY + diff * easeInOutCubic(progress))
       if (progress < 1) requestAnimationFrame(step)
-      else onComplete?.()
+      else {
+        detach()
+        onComplete?.()
+      }
     }
     requestAnimationFrame(step)
+  }
+
+  /**
+   * A trackpad keeps sending momentum wheel events after the swipe that closed
+   * the lightbox. Swallow them until they stop so they do not scroll the grid
+   * away from the card or retry a failed page.
+   */
+  function holdWheelUntilQuiet() {
+    let quiet: ReturnType<typeof setTimeout>
+    const release = () => {
+      clearTimeout(quiet)
+      clearTimeout(cap)
+      window.removeEventListener('wheel', swallow, true)
+    }
+    const swallow = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      clearTimeout(quiet)
+      quiet = setTimeout(release, 250)
+    }
+    quiet = setTimeout(release, 250)
+    const cap = setTimeout(release, 2000)
+    window.addEventListener('wheel', swallow, { capture: true, passive: false })
   }
 
   function flashCard(el: HTMLElement) {
@@ -437,7 +474,8 @@
     setTimeout(() => ring.remove(), 1200)
   }
 
-  async function closeLightbox() {
+  async function closeLightbox(e: CustomEvent<{ gesture?: 'wheel' }>) {
+    if (e.detail?.gesture === 'wheel') holdWheelUntilQuiet()
     const idx = lightboxIndex
     lightboxIndex = null
     if (idx != null && idx >= shown && idx < posts.length) {

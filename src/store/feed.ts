@@ -8,6 +8,8 @@ export const feedPhase = writable<FeedPhase>('idle')
 export const feedBound = writable(false)
 /** True while a leap animation is driving scroll, so the button ignores that motion. */
 export const feedLeaping = writable(false)
+/** Related subreddits for the open subreddit, shown in the bottom-right dock. */
+export const relatedSubreddits = writable<string[]>([])
 
 let jump: ((dir: JumpDir) => void) | null = null
 
