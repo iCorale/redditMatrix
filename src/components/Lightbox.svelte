@@ -29,7 +29,6 @@
 
   $: current   = posts[currentIndex]
   $: url       = current?.fullUrl ?? current?.url ?? ''
-  $: photoUrl  = viewUrl(current)
   $: title     = current?.title ?? ''
   $: embedUrl  = current?.embedUrl ?? null
   $: shareUrl  = embedUrl ? embedUrl.replace('/ifr/', '/watch/') : url
@@ -788,7 +787,7 @@
       const post = posts[index]
       if (!post) continue
       if (!post.embedUrl) {
-        warm(viewUrl(post), next)
+        warm(post.fullUrl ?? post.url, next)
         continue
       }
       // A clip needs its lookup before the player can start. The file itself is
@@ -809,19 +808,6 @@
   // ── Zoom (Reddit-style: natural resolution + scroll clamp) ────────────────
   // iPhone and iPad tabs are killed far sooner than desktop ones.
   const ZOOM_DEVICE_PIXELS = navigator.maxTouchPoints > 0 ? 32_000_000 : 64_000_000
-  const OWN_COPY_PIXELS = 24_000_000
-
-  /**
-   * On a phone a huge picture gets its own copy under another address. Safari
-   * shares the decoded bitmap per address and can keep the zoomed size, so on
-   * the shared copy it would stay for as long as the grid card shows it.
-   */
-  function viewUrl(post: Post | undefined) {
-    const src = post?.fullUrl ?? post?.url ?? ''
-    if (!src || !(navigator.maxTouchPoints > 0)) return src
-    if ((post?.width ?? 0) * (post?.height ?? 0) <= OWN_COPY_PIXELS) return src
-    return `${src}${src.includes('?') ? '&' : '?'}rm=view`
-  }
   let isZoomed = false
   let scrollContainer: HTMLDivElement
   let imgEl: HTMLImageElement
@@ -1258,7 +1244,7 @@
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <img
         use:releaseImage
-        src={photoUrl}
+        src={url}
         alt={title}
         referrerpolicy="no-referrer"
         data-photo
