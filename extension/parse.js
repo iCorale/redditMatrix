@@ -17,12 +17,15 @@ function attr(tag, name) {
 function boxOfId(fragment, id) {
   if (!id) return null
   const safe = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = fragment.match(new RegExp('<img\\b[^>]*' + safe + '[^>]*>', 'i'))
-  if (!match) return null
-  const x = Number(attr(match[0], 'width'))
-  const y = Number(attr(match[0], 'height'))
-  if (!(x > 0 && y > 0)) return null
-  return { x, y }
+  // A gallery's first <img> for an id is often the carousel slide without a size.
+  const re = new RegExp('<img\\b[^>]*' + safe + '[^>]*>', 'gi')
+  let match
+  while ((match = re.exec(fragment))) {
+    const x = Number(attr(match[0], 'width'))
+    const y = Number(attr(match[0], 'height'))
+    if (x > 0 && y > 0) return { x, y }
+  }
+  return null
 }
 
 function splitTag(fragment) {

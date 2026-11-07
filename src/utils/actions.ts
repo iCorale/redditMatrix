@@ -6,6 +6,23 @@ function absorbEvent_(event: Event) {
   return false
 }
 
+/**
+ * A removed <img> keeps its picture in use until garbage collection, and
+ * Safari cannot free the decoded bitmap before then.
+ */
+export function releaseImage(node: HTMLImageElement) {
+  return {
+    destroy() {
+      dropSource(node)
+    }
+  }
+}
+
+export function dropSource(img: HTMLImageElement) {
+  img.removeAttribute('srcset')
+  img.removeAttribute('src')
+}
+
 export function longpress(
   node: HTMLElement,
   { callback, delay = 700 }: { callback: Function; delay?: number }

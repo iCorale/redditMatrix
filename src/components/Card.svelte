@@ -42,7 +42,7 @@
   import { onMount, tick, createEventDispatcher } from 'svelte'
   const dispatch = createEventDispatcher()
 
-  import { longpress } from '@utils/actions'
+  import { longpress, releaseImage } from '@utils/actions'
   import { getRedgifsMedia, peekRedgifsMedia, redgifsSlug, sharpCover } from '@utils/api'
   import { spinup } from '@utils/transition'
 
@@ -178,6 +178,7 @@
     <div class="backdrop" />
     {#if active && cover && !failedImage}
       <img
+        use:releaseImage
         referrerpolicy="no-referrer"
         class:shown={loaded}
         on:error|once={() => {

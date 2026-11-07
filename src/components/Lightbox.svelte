@@ -17,6 +17,7 @@
   import CommentOutline from '~icons/mdi/comment-outline'
 
   import { getRedgifsMedia, peekRedgifsMedia, redgifsSlug, sharpCover, type Post } from '@utils/api'
+  import { dropSource, releaseImage } from '@utils/actions'
   import { showToast } from '@store/toast'
 
   export let posts: Post[] = []
@@ -28,6 +29,7 @@
 
   $: current   = posts[currentIndex]
   $: url       = current?.fullUrl ?? current?.url ?? ''
+  $: photoUrl  = viewUrl(current)
   $: title     = current?.title ?? ''
   $: embedUrl  = current?.embedUrl ?? null
   $: shareUrl  = embedUrl ? embedUrl.replace('/ifr/', '/watch/') : url
@@ -786,7 +788,7 @@
       const post = posts[index]
       if (!post) continue
       if (!post.embedUrl) {
-        warm(post.fullUrl ?? post.url, next)
+        warm(viewUrl(post), next)
         continue
       }
       // A clip needs its lookup before the player can start. The file itself is
@@ -800,12 +802,26 @@
         })
       }
     }
+    for (const img of preloaders) if (!next.includes(img)) dropSource(img)
     preloaders = next
   }
 
   // ── Zoom (Reddit-style: natural resolution + scroll clamp) ────────────────
   // iPhone and iPad tabs are killed far sooner than desktop ones.
   const ZOOM_DEVICE_PIXELS = navigator.maxTouchPoints > 0 ? 32_000_000 : 64_000_000
+  const OWN_COPY_PIXELS = 24_000_000
+
+  /**
+   * On a phone a huge picture gets its own copy under another address. Safari
+   * shares the decoded bitmap per address and can keep the zoomed size, so on
+   * the shared copy it would stay for as long as the grid card shows it.
+   */
+  function viewUrl(post: Post | undefined) {
+    const src = post?.fullUrl ?? post?.url ?? ''
+    if (!src || !(navigator.maxTouchPoints > 0)) return src
+    if ((post?.width ?? 0) * (post?.height ?? 0) <= OWN_COPY_PIXELS) return src
+    return `${src}${src.includes('?') ? '&' : '?'}rm=view`
+  }
   let isZoomed = false
   let scrollContainer: HTMLDivElement
   let imgEl: HTMLImageElement
@@ -1016,6 +1032,7 @@
     clearTimeout(idleTimer)
     clearTimeout(hintTimer)
     videoEl?.pause()
+    preloaders.forEach(dropSource)
     inerted.forEach((el) => el.removeAttribute('inert'))
     returnFocus?.focus({ preventScroll: true })
     const body = document.body
@@ -1240,7 +1257,8 @@
       {/if}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <img
-        src={url}
+        use:releaseImage
+        src={photoUrl}
         alt={title}
         referrerpolicy="no-referrer"
         data-photo
