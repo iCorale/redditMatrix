@@ -437,14 +437,14 @@
       return
     }
     const least = pinchRect ? Math.min(0.6, (0.6 * fitWidth()) / pinchRect.width) : 0.6
-    pinchScale = Math.min(10, Math.max(least, Math.exp(dy / 140)))
+    pinchScale = Math.min(gestureCap(), Math.max(least, Math.exp(dy / 140)))
     imgEl.style.transform = `scale(${pinchScale})`
   }
 
   function movePinch(event: TouchEvent) {
     if (!imgEl || event.touches.length < 2) return
     const { distance, mid } = touchPair(event)
-    pinchScale = Math.min(10, Math.max(0.6, distance / pinchD0))
+    pinchScale = Math.min(gestureCap(), Math.max(0.6, distance / pinchD0))
     pinchMid = mid
     imgEl.style.transform = `translate(${mid.x - pinchMid0.x}px, ${mid.y - pinchMid0.y}px) scale(${pinchScale})`
   }
@@ -818,6 +818,20 @@
     return nw * Math.min(1, window.innerWidth / nw, window.innerHeight / nh)
   }
 
+  /** Widest layout width a zoom may reach: 8× the fit, and within the decode budget. */
+  function widestZoom() {
+    const nw = imgEl?.naturalWidth || 0
+    const nh = imgEl?.naturalHeight || 0
+    if (!(nw > 0 && nh > 0)) return Infinity
+    const dpr = window.devicePixelRatio || 1
+    return Math.min(8 * fitWidth(), (nw * Math.sqrt(ZOOM_DEVICE_PIXELS / (nw * nh))) / dpr)
+  }
+
+  /** Gesture scale limit. While a finger is down the picture grows by transform, and Safari decodes for that size too. */
+  function gestureCap() {
+    return pinchRect ? Math.max(1, widestZoom() / pinchRect.width) : 1
+  }
+
   function zoomIn(e: MouseEvent) {
     const rect = (e.currentTarget as HTMLImageElement).getBoundingClientRect()
     const fracX = (e.clientX - rect.left) / rect.width
@@ -847,10 +861,9 @@
 
     const dpr = window.devicePixelRatio || 1
     let scale = wantWidth ? wantWidth / nw : Math.max(1 / dpr, (2 * fitW) / nw)
-    scale = Math.min(scale, (8 * fitW) / nw)
     // Safari decodes at the drawn size in device pixels. Past the budget the
     // tab runs out of memory and WebKit reloads the page.
-    scale = Math.min(scale, Math.sqrt(ZOOM_DEVICE_PIXELS / (nw * nh)) / dpr)
+    scale = Math.min(scale, widestZoom() / nw)
     const dw = Math.max(1, Math.floor(nw * scale))
     const dh = Math.max(1, Math.floor(nh * scale))
     img.style.width = `${dw}px`

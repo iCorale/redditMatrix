@@ -259,6 +259,15 @@
     return true
   }
 
+  // A phone tab holds far less. Behind the lightbox only what can show through
+  // a drag-to-close stays decoded, plus the card it morphs back onto.
+  const SLIM_BEHIND_LIGHTBOX = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
+  let slimIndex: number | null = null
+  $: if (SLIM_BEHIND_LIGHTBOX && lightboxIndex !== slimIndex) {
+    slimIndex = lightboxIndex
+    refreshActive()
+  }
+
   /** Originals stay on the first screen, the viewport ± one screen, and both leap landings. */
   function refreshActive() {
     const vh = window.innerHeight || 1
@@ -266,6 +275,7 @@
     const downLine = y + vh * LEAP_SCREENS
     const upLine = Math.max(0, y - vh * LEAP_SCREENS)
     const focus = leapFocus
+    const slim = SLIM_BEHIND_LIGHTBOX && lightboxIndex !== null
     const next: boolean[] = []
     for (let i = 0; i < shown; i++) {
       const el = document.getElementById(`card-${i}`)
@@ -276,6 +286,10 @@
       const rect = el.getBoundingClientRect()
       const top = rect.top + y
       const bottom = rect.bottom + y
+      if (slim) {
+        next.push(i === lightboxIndex || rangeHits(top, bottom, y, y + vh))
+        continue
+      }
       next.push(
         rangeHits(top, bottom, 0, vh) ||
           rangeHits(top, bottom, y - vh, y + vh * 2) ||
